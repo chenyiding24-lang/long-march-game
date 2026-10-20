@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#26231f">
+<meta name="description" content="长征：万水千山 —— 统帅视角的思政实践作业文字游戏，二万五千里路线示意图 + 四资源抉择。">
+<title>长征：万水千山 · v1 初版</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- 顶栏：链接式导航，不做下拉菜单 -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="brand-seal">长征</span>
+      <h1>万水千山</h1>
+      <span class="brand-sub">v1 初版 · 统帅视角 · 路线示意图</span>
+    </div>
+    <nav id="topnav">
+      <button class="navlink" id="nav-cards">手法卡与道具</button>
+      <button class="navlink" id="nav-board">木牌</button>
+      <button class="navlink" id="nav-wall">名单墙</button>
+      <button class="navlink" id="nav-history">史料与出处</button>
+      <button class="navlink" id="nav-help">规则手册</button>
+      <button class="navlink dim" id="reset-btn">清空存档</button>
+    </nav>
+  </header>
+
+  <!-- 右上角资源条：常驻，CG 时隐藏 -->
+  <div id="hud" aria-label="资源状态"></div>
+
+  <!-- 地图主视图 -->
+  <main id="viewport" aria-label="长征路线地图">
+    <div id="map">
+      <svg id="art-layer" viewBox="0 0 2000 4600" width="2000" height="4600"></svg>
+      <svg id="fog-ring" width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none">
+        <circle id="sight-ring" cx="0" cy="0" r="0"/>
+      </svg>
+    </div>
+    <div id="fog"></div>
+    <div id="vignette"></div>
+    <div class="map-tools">
+      <button id="far-toggle">远望全图</button>
+      <button id="center-btn">回到部队</button>
+      <span class="zoom" id="zoom-label">30%</span>
+    </div>
+    <div class="map-note">按住拖动地图 · 滚轮缩放 · Tab 远望全图 · 点击前方格行军</div>
+    <div class="compass">
+      <span>北</span><i></i>
+      <em>全程约二万五千里 · 赣→陕</em>
+    </div>
+    <div class="bottom-trays">
+      <div class="tray">
+        <span class="tray-name">手法卡</span>
+        <div id="hand-tray"></div>
+      </div>
+      <div class="tray">
+        <span class="tray-name">身边人</span>
+        <div id="comrade-tray"></div>
+      </div>
+    </div>
+  </main>
+
+  <div id="modal-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <footer id="footbar">
+    <span>思政实践作业作品 · 史实分级 A（权威记载）／R（回忆转述）／?（待核实）</span>
+    <span>地图为路线示意图，省界非精确边界；数字口径与出处见「史料与出处」</span>
+  </footer>
+</div>
+
+<script src="data.js"></script>
+<script src="game.js"></script>
+</body>
+</html>

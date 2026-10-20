@@ -1,0 +1,11 @@
+# 系统垃圾
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# 本地工具与依赖（本站零依赖，不应出现）
+node_modules/
+.wrangler/
+
+# 浏览器跑测时可能落到本地的导出
+*.log
