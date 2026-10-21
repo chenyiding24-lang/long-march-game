@@ -27,7 +27,7 @@
 
 要点：
 
-1. **不要**把 `.md` 设计文档、`测试/`、`00-`～`10-` 那些文件发到线上 —— 那是本地施工记录，含未定稿内容。
+1. **不要**把 `.md` 设计文档、`测试/`、`00-`～`12-` 那些文件发到线上 —— 那是本地施工记录，含未定稿内容。
 2. **不要**为发布而拆分/合并/重命名上述文件，也不要改 `index.html` 里的相对引用。
 3. 如果托管平台只能把**整个文件夹**当根目录：项目根已放了一个 `index.html`，它只做一件事 —— 立刻跳转进 `游戏/index.html`。这种情况下线上 URL 里会出现中文路径（已 URL 编码，能正常访问），但**首选还是把 `游戏/` 单独当根**。
 4. 服务器**只需静态文件**，不需要任何 rewrite / API / 鉴权。存档全在浏览器 `localStorage`（键名 `cwqs_save_v1` 和 `cwqs_meta_v1`）。
@@ -53,7 +53,7 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 │  ├─ 发布自检.js         ← 发布前/改动后跑这个
 │  ├─ data校验.js         ← 游戏数据引用完整性校验
 │  └─ balance-bench.js    ← 数值平衡跑测台（要在浏览器里注入，见 §五）
-└─ 00～10-*.md            ← 设计文档与实现记录，见 §三
+└─ 00～12-*.md            ← 设计文档与实现记录，见 §三
 ```
 
 ---
@@ -76,16 +76,16 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 | 位置 | 模块 | 职责 |
 |---|---|---|
 | `game.js:35` | `BALANCE` | **所有可调数值，只在这一处** |
-| `game.js:71` | `Store` | 状态 + localStorage 读写（`load/save/snapshot/restore`） |
-| `game.js:118` | `Router` | 弹窗栈。**全站不用下拉菜单**，一律 链接 + 弹窗 |
-| `game.js:190` | `Hud` | 右上角四条资源 |
-| `game.js:247` | `MapView` | SVG 大地图（viewBox 2000×4600）+ 拖拽/滚轮/双指缩放 + 视野遮罩 |
-| `game.js:640` | `Game` | 主流程：`march`（行军 tick）→ `compute`（结算）→ `applyChoice` → `commit` → `finishChoice` → `afterResolve` |
-| `game.js:1296` | `Sin` | 「多行不义必自毙」：违纪计数与收账 |
-| `game.js:1358` | `Flow` | 部队打散 → 下一程；违纪自毙 → 回到走错前那一步 |
-| `game.js:1423` | `Pages` | 木牌 / 名单墙 / 史料 / 卡与道具 / 规则手册 / 终章入口 |
-| `game.js:1606` | `Ending` | 终章「念名字」（目前**只有 A 结局**） |
-| `game.js:1649` | `Game.debug` | 调试桥：把内部对象挂到 `window.Game`，供跑测台用 |
+| `game.js:74` | `Store` | 状态 + localStorage 读写（`load/save/snapshot/restore`） |
+| `game.js:120` | `Router` | 弹窗栈。**全站不用下拉菜单**，一律 链接 + 弹窗 |
+| `game.js:194` | `Hud` | 右上角四条资源 |
+| `game.js:251` | `MapView` | SVG 大地图（viewBox 2000×4600）+ 拖拽/滚轮/双指缩放 + 视野遮罩 + **下一站判定**（`frontNodes / nextNode / goNext`） |
+| `game.js:704` | `Game` | 主流程：`march`（行军 tick）→ `compute`（结算）→ `applyChoice` → `commit` → `finishChoice` → `afterResolve`；行进事件文案在 `rollMoveEvent / pickVariant`（`game.js:1038`、`game.js:1071`） |
+| `game.js:1382` | `Sin` | 「多行不义必自毙」：违纪计数与收账 |
+| `game.js:1444` | `Flow` | 部队打散 → 下一程；违纪自毙 → 回到走错前那一步 |
+| `game.js:1509` | `Pages` | 玩家须知 / 规则手册 / 木牌 / 名单墙 / 史料 / 卡与道具 / 开场 |
+| `game.js:1727` | `Ending` | 终章「念名字」（目前**只有 A 结局**） |
+| `game.js:1770` | `Game.debug` | 调试桥：把内部对象挂到 `window.Game`，供跑测台用；`Game.debug.event('mv_mule', 1)` 直接弹出某条行进事件的某个写法 |
 
 `data.js` 全是数组/字面量：`NODES`（49 格）、`EDGES`（53 边）、`MOVE_EVENTS`（10 个行进突发事件）、`HISTORY`（41 条史料，带 A/R/? 可信度分级）、`CARDS`（20 张手法卡）、`ITEMS`（7 道具）、`COMRADES`、`REGIONS/PROVINCES/RIVERS/RANGES`（底图几何）。
 
@@ -105,7 +105,10 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 6. **地图坐标是示意图，不是精确地理**。省界/河道是手绘近似，`index.html` 页脚已声明。别"修正"成真实地图（那需要外部瓦片，违反第 3 条）。
 7. **`localStorage` 按 origin 隔离。** 本机 `file://` 的存档**不会**出现在线上；换域名也是新档。这是预期行为，别为此写同步逻辑或后端。
 8. **`测试/balance-bench.js` 用 `file:///` 注入 `<script>` 才能工作**（`file://` 下 `fetch` 被 CORS 挡）。它在 http 网址上跑不了 —— 需要跑数值时请在本地双击 `游戏/index.html` 后用，不要试图改成 http 兼容。
-9. 改完全量自检：`node --check 游戏/game.js && node 测试/发布自检.js`，并在浏览器 Console 确认无报错。
+9. **「玩家须知」只在第一次进游戏时弹**（看 `Store.s.flags.sawNotes`），之后靠地图左下角的朱红「须知」章重开。别改成每次都弹，那会变成拦路。
+10. **抉择弹窗是 `closable:false + blocking:true`**，玩家点不关它；`Router.closeAll()` 里那句"只有真按过选项才结清"的守卫是防崩的，别删。
+11. **`MOVE_EVENTS` 选项上的 `anch:[...]` 不是冗余字段，别删。** 它是"选项里提到的每一个实体，必须在**这一次屏幕上的正文**里出现过"这条口径的可执行版本（用户反馈「半里路的垫木」那条事件读起来没头没尾之后加的）。`测试/data校验.js` 会拿它去查每一条正文和每一个不带自己 options 的变体；删掉 anch = 关掉这道闸。变体可以自带 `options`（不带走事件级那几条，`pickVariant` 就是这个合并口径），**自带 options 的变体必须自己把锚点交代全**。改完跑 `node 测试/data校验.js 游戏/data.js --对账` 能打出「事件 × 变体 × 选项 × 锚点」对账清单。
+12. 改完全量自检：`node --check 游戏/game.js && node 测试/发布自检.js`，并在浏览器 Console 确认无报错。
 
 ---
 
@@ -122,6 +125,7 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 - **B / C 结局**：目前只有 A 结局（走到吴起镇·念名字）。打散和自毙走的是 `Flow` 的"下一程/警示重开"，不是独立结局页。
 - **名单墙的单局复盘页**、**AIGC 美术位与地标插画**、**CG 分镜配图**、**音频**：都还是空的，代码里留了位。
 - **人物篇目**（陈树湘 / 杨积庆 / 老钱 / 辛父 / 幺笙）作为独立关卡未做。
+- **`anch` 锚点闸目前只覆盖 `MOVE_EVENTS`（行进事件）**。`NODES`（大关卡与事件格）的选项没上这道闸，因为一个节点只有一套正文+一套选项，不存在"几种写法共用一套选项"那个缺陷。**不要**自作主张给 49 个节点批量补 `anch`，那会产生大量假错误；要推广请先问。
 - **08 §13 的 7 个设计问题（尤其初始资源与追兵强度）用户尚未拍板** —— 所以 §六 的数值是暂定值，**不要**把它当定稿去"完善"。
 
 ---

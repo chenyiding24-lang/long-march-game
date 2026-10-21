@@ -96,6 +96,7 @@ const Store = {
       const raw = localStorage.getItem(SAVE_KEY);
       this.s = raw ? Object.assign(this.defaultState(), JSON.parse(raw)) : this.defaultState();
       if (!this.s.at || !NODE_BY_ID[this.s.at]) this.s.at = 'g1';
+      if (!this.s.flags) this.s.flags = {};
     } catch (e) { this.s = this.defaultState(); }
     try {
       const rawM = localStorage.getItem(META_KEY);
@@ -180,9 +181,11 @@ const Router = {
     return close;
   },
   closeAll() {
-    /* 选项按下后有一段"原地亮账"的停留：窗口被整体关掉时先把这一步结清，不能让定时器悬空补刀 */
+    /* 选项按下后有一段"原地亮账"的停留：窗口被整体关掉时先把这一步结清，不能让定时器悬空补刀。
+       只有真按过选项（ctx.opt 有值）才结清 —— 没选过就 closeAll 不能凭空替玩家下一条决定。 */
     const c = Game.activeCtx;
-    if (c && c.settle && !c.done) { c.done = true; c.settle(); }
+    if (c && c.settle && !c.done && c.opt) { c.done = true; c.settle(); }
+    else if (c && !c.opt && !c.done && Game.activeCtx === c) Game.activeCtx = null;
     [...this.stack].forEach(e => { e.el.remove(); }); this.stack = []; document.body.classList.remove('hud-hidden', 'modal-open');
   }
 };
@@ -380,6 +383,58 @@ const MapView = {
     return this.dist(cur, node) <= this.sight();
   },
 
+  /* 脚下这一步真能踩下去的去向：相邻 + 已探明 + 没被锁。
+     先没走过的（别把玩家推荐回已经打完的来路），再大关卡，最后就近。 */
+  frontNodes() {
+    const s = Store.s, cur = NODE_BY_ID[s.at];
+    if (!cur) return [];
+    const rank = n => (s.done[n.id] ? 2 : 0) + (n.kind === 'gate' ? 0 : 1);
+    return [...(ADJ[s.at] || new Set())]
+      .map(id => NODE_BY_ID[id])
+      .filter(n => n && n.id !== s.at && this.visible(n)
+        && !(n.lockedUntil && !s.done[n.lockedUntil])
+        && !(n.hiddenUntilWin && !(Store.meta.wins > 0)))
+      .sort((a, b) => (rank(a) - rank(b)) || (this.dist(cur, a) - this.dist(cur, b)));
+  },
+  nextNode() { return this.frontNodes()[0] || null; },
+
+  /* 下一站的屏幕坐标（视口 px）：控件与边缘箭头都靠它定位 */
+  nextScreenXY(n) {
+    const vp = this.vp.getBoundingClientRect();
+    return { x: n.x * this.s + this.tx, y: n.y * this.s + this.ty, w: vp.width, h: vp.height };
+  },
+
+  /* 下一站不在眼前时，把箭头钉在视口边上指着它 —— 新玩家最容易卡在这里 */
+  renderNextArrow() {
+    const el = $('#next-arrow');
+    if (!el) return;
+    const n = this.nextNode();
+    if (!n || Game.marching) { el.classList.remove('on'); return; }
+    const { x, y, w, h } = this.nextScreenXY(n);
+    const m = this.coarse ? 116 : 84;   /* 边距：让开地图控件（触屏上还要让开底部军账条） */
+    if (x > m && x < w - m && y > m && y < h - m) { el.classList.remove('on'); return; }
+    const cx = clamp(x, m, Math.max(m, w - m));
+    const cy = clamp(y, m, Math.max(m, h - m));
+    el.style.left = cx.toFixed(1) + 'px';
+    el.style.top = cy.toFixed(1) + 'px';
+    el.style.setProperty('--ang', (Math.atan2(y - cy, x - cx) * 180 / Math.PI).toFixed(1) + 'deg');
+    el.title = '下一站 · ' + n.name;
+    el.dataset.node = n.id;
+    el.classList.add('on');
+  },
+
+  renderNextPill() {
+    const pill = $('#next-pill');
+    if (!pill) return;
+    const n = this.nextNode();
+    if (!n) { pill.hidden = true; return; }
+    const gate = n.kind === 'gate';
+    pill.hidden = false;
+    pill.innerHTML = `<span class="np-tag">${gate ? '下一站 · 大关卡' : '下一站'}</span>` +
+      `<span class="np-name">${esc(n.name)}</span><span class="np-go">点我行军 ▸</span>`;
+    pill.title = gate ? '攻坚 / 抉择 —— 这一格有 CG 分镜与木牌刻名' : '走过去：一格一次抉择，粮 -1 · 时 -1';
+  },
+
   render() {
     const s = Store.s;
     /* 路线：只画两端至少一个可见的边 */
@@ -398,6 +453,7 @@ const MapView = {
     this.routeLayer.innerHTML = rl;
 
     /* 节点 */
+    const nxt = this.nextNode();
     let nl = '';
     NODES.forEach(n => {
       if (!this.visible(n)) return;
@@ -405,9 +461,12 @@ const MapView = {
       const here = n.id === s.at;
       const done = !!s.done[n.id];
       const hidden = n.known === 'hidden' && !done;
-      const cls = ['node', n.kind, here ? 'here' : '', adj ? 'reach' : '', done ? 'done' : '', hidden ? 'unknown' : ''].filter(Boolean).join(' ');
+      const isNext = !!nxt && n.id === nxt.id;
+      const cls = ['node', n.kind, here ? 'here' : '', adj ? 'reach' : '', isNext ? 'next' : '', done ? 'done' : '', hidden ? 'unknown' : ''].filter(Boolean).join(' ');
       const label = hidden ? '?' : n.name;
+      const go = isNext ? '▸ 下一站 · ' + (this.hintOf(n, hidden).split(' · ')[0]) : this.hintOf(n, hidden);
       nl += `<g class="${cls}" data-node="${n.id}" transform="translate(${n.x},${n.y})">
+        ${isNext ? '<circle class="next-halo" r="58"/><circle class="next-ring" r="58"/>' : ''}
         <circle class="hit" r="34"/>
         ${n.kind === 'gate'
           ? `<g class="glyph gate-g"><path d="M0,-17 L15,0 L0,17 L-15,0 Z"/><circle r="5"/></g>`
@@ -415,10 +474,11 @@ const MapView = {
         <text class="n-label" y="40">${esc(label)}</text>
         ${n.kind === 'gate' && n.date ? `<text class="n-date" y="58">${esc(n.date)}</text>` : ''}
         ${hidden ? `<text class="n-hint" y="-26">?</text>` : ''}
-        ${adj && !here ? `<text class="n-go" y="-30">${esc(this.hintOf(n, hidden))}</text>` : ''}
+        ${adj && !here ? `<text class="n-go${isNext ? ' on' : ''}" y="-30">${esc(go)}</text>` : ''}
       </g>`;
     });
     this.nodeLayer.innerHTML = nl;
+    this.renderNextPill();
 
     /* 敌军 */
     let el = '';
@@ -475,6 +535,7 @@ const MapView = {
     });
     const a = this.army.firstElementChild;
     if (a) a.setAttribute('transform', `scale(${k.toFixed(3)})`);
+    this.renderNextArrow();
   },
 
   goTo(node, instant) {
@@ -607,6 +668,8 @@ const MapView = {
       if (e.key === 'Tab') { e.preventDefault(); this.setFar(!this.far); }
       if (e.key === '+' || e.key === '=') { this.s = clamp(this.s * 1.12, 0.12, 1); this.applyTransform(); }
       if (e.key === '-') { this.s = clamp(this.s * 0.89, 0.12, 1); this.applyTransform(); }
+      /* 空格 = 走下一站（焦点在按钮上时让给按钮自己，别抢） */
+      if (e.key === ' ' && !/^(BUTTON|A|INPUT)$/.test((e.target.tagName || ''))) { e.preventDefault(); Game.goNext(); }
     });
   }
 };
@@ -647,7 +710,11 @@ const Game = {
     this.bindChrome();
     Hud.render();
     if (!Store.s.flags.seenIntro) { Store.s.flags.seenIntro = true; Store.save(); Pages.intro(); }
-    else { Toast.show(MapView.coarse ? '单指拖动地图 · 双指捏合缩放 · 点击前方节点行军' : '拖动地图可移动视野 · 滚轮缩放 · 点击前方节点行军'); }
+    else {
+      Toast.show(MapView.coarse ? '单指拖动地图 · 双指捏合缩放 · 点击前方节点行军' : '拖动地图可移动视野 · 滚轮缩放 · 点击前方节点行军');
+      /* 老存档第一次也会补看一次须知，看过就不再拦路 */
+      if (!Store.s.flags.sawNotes) setTimeout(() => Pages.notes(), 700);
+    }
   },
 
   bindChrome() {
@@ -659,6 +726,10 @@ const Game = {
     $('#far-toggle').addEventListener('click', () => MapView.setFar(!MapView.far));
     $('#center-btn').addEventListener('click', () => MapView.goTo(NODE_BY_ID[Store.s.at]));
     $('#reset-btn').addEventListener('click', () => Pages.confirmReset());
+    $('#notes-btn').addEventListener('click', () => Pages.notes());
+    /* 下一站的两种点法：底部药丸 + 视口边缘箭头，都走同一套可达性判定 */
+    $('#next-pill').addEventListener('click', () => this.goNext());
+    $('#next-arrow').addEventListener('click', () => { if (!MapView.moved) this.goNext(); });
     $('#hand-tray').addEventListener('click', (e) => {
       const c = e.target.closest('[data-card]'); if (!c) return;
       Pages.cardDetail(c.dataset.card);
@@ -667,6 +738,17 @@ const Game = {
       const c = e.target.closest('[data-comrade]'); if (!c) return;
       Pages.comradeDetail(c.dataset.comrade);
     });
+  },
+
+  /* 走下一站：药丸、边缘箭头、空格键共用。视野外的先把镜头拉过去，免得点了没反应 */
+  goNext() {
+    const n = MapView.nextNode();
+    if (!n) { Toast.show('这一步没有能走的格 —— 点「远望全图」看路线，或先处理脚下这一格'); return; }
+    const vp = MapView.vp.getBoundingClientRect();
+    const p = MapView.nextScreenXY(n);
+    const inView = p.x > 60 && p.x < vp.width - 60 && p.y > 60 && p.y < vp.height - 60;
+    if (!inView) MapView.goTo(n);
+    this.onNodeClick(n.id);
   },
 
   /* 点击节点：可达 → 行军；已在原地 → 打开 */
@@ -982,15 +1064,19 @@ const Game = {
     return this.pickVariant(picked);
   },
 
-  /* 同一条事件的几种说法：先出没见过的，都出过就随机重出 */
+  /* 同一条事件的几种说法：先出没见过的，都出过就随机重出。
+     变体可以自带 options —— 不带就沿用事件的那几条。
+     口径：屏幕上出现的每一个人名、物件、数字，都必须在这一次的正文里交代过，
+     否则选项读起来就是没头没尾的（「杀掉」杀什么？玩家不知道）。 */
   pickVariant(m) {
     const f = Store.s.flags;
-    const list = [{ title: m.title, text: m.text }].concat(m.variants || []);
+    const list = [{ title: m.title, text: m.text, options: m.options }].concat(m.variants || []);
     const used = f.mvVar || (f.mvVar = {});
     const fresh = list.map((v, i) => i).filter(i => !used[m.id + '#' + i]);
     const i = fresh.length ? fresh[Math.floor(Math.random() * fresh.length)] : Math.floor(Math.random() * list.length);
     used[m.id + '#' + i] = 1;
-    return Object.assign({}, m, { title: list[i].title, text: list[i].text });
+    const v = list[i];
+    return Object.assign({}, m, { title: v.title, text: v.text, options: v.options || m.options });
   },
 
   /* ---------- 结算：一条清晰的管线 ----------
@@ -1422,6 +1508,41 @@ const History = {
 /* ---------- Pages：链接式页面（全部走弹窗） ---------- */
 const Pages = {
 
+  /* 出发前的 30 秒须知；地图上的朱红章子可以重新打开 */
+  notes(after) {
+    const first = !Store.s.flags.sawNotes;
+    Router.open({
+      title: '玩家须知', kicker: first ? '出发前读这一页 · 约 30 秒' : '玩家须知', size: 'wide',
+      onClose: () => {
+        Store.s.flags.sawNotes = true; Store.save();
+        if (after) setTimeout(after, 120);
+        else Toast.show('亮红圈、写着「▸ 下一站」的那一格 —— 点它就走');
+      },
+      html: `
+      <h3>这一局你要做什么</h3>
+      <p class="lead">从于都河走到吴起镇。地图上一格一格往北推，<b>每走一格就是一次抉择</b>。走到终点时，你带出来的人和没带出来的人，都记在那块空白杉木牌上。</p>
+      <h3>只要记住三件事</h3>
+      <ul>
+        <li><b>找红圈</b>：套着<b>呼吸红圈</b>、头顶写着「<b>▸ 下一站</b>」的那一格，就是眼下能走的地方 —— 点它即行军。屏幕边上亮起<b>红箭头</b>时，说明下一站在视野外，点箭头也照样过去。</li>
+        <li><b>盯右上角</b>：<b>兵 · 粮 · 时 · 民</b> 四条是你全部的判断依据。粮和时每走一格各 <b>-1</b>；哪个归零，那一格就开始死人，兵归零这一程打完。</li>
+        <li><b>代价按下去才看得见</b>：选项上故意不标价。按完之后<b>不跳转</b> —— 选了的和没选的那几条，会在各自下面同时亮起增减，原地停几秒给你看，那就是这一格的真实账。</li>
+      </ul>
+      <h3>别的不做也能玩，但会更快</h3>
+      <ul>
+        <li>底部「<b>手法卡</b>」能在抉择里附一张卡减折损，一局一张；「<b>身边人</b>」是被动，替你挡一次作战或冻饿的判定 —— 挡不住违纪的账。</li>
+        <li>拖地图：按住拖动（从格子上按住也能拖），滚轮缩放，<kbd>Tab</kbd> 或点「远望全图」看整条路线。触屏：单指拖、双指捏合缩放。</li>
+        <li>大关卡打下来会<b>缴获回补</b>粮与时，并把英雄之名刻上木牌、解锁一条史料。</li>
+      </ul>
+      <h3>卡住了怎么办</h3>
+      <ul>
+        <li>点了没反应 → 只能走到与脚下<b>相连</b>的格子；不相邻的会提示，云里的先看不见。</li>
+        <li>忘了规则 → 顶栏「<b>规则手册</b>」写得很细。这页随时能重看：地图左下角那颗<b>朱红「须知」章</b>。</li>
+      </ul>
+      <p class="note-hint">部队打散<b>不是 Game Over</b>：收容队会把你接住，下一程接着走，木牌上的名字不清零。违纪也不立刻结算 —— 「多行不义必自毙」，那笔账延迟两三格才到，而那时你正好需要带路的人。</p>`,
+      actions: [{ text: after ? '出发' : '回到地图', kind: 'primary' }]
+    });
+  },
+
   help() {
     Router.open({
       title: '操作与规则', kicker: '手册', size: 'wide',
@@ -1429,7 +1550,7 @@ const Pages = {
       <h3>怎么玩</h3>
       <ul>
         <li>在地图上<b>按住拖动</b>可以推地图（从节点上按住也能拖），滚轮缩放，按 <kbd>Tab</kbd> 或点右上「远望全图」看整条路线；视野外是阴云与飞雪。<b>触屏</b>：单指拖、<b>双指捏合缩放</b>（捏合时两指中点往哪走，地图就往哪推），格子的命中圈在触屏上会自动放大。</li>
-        <li>红圈呼吸的地方写着<b>你在这里</b>；套着<b>淡红虚线圈</b>的格子就是这一步能踩的去向，点它即<b>行军</b>，每走一格：粮 -1、时 -1。不相邻的点不动。</li>
+        <li>红圈呼吸的地方写着<b>你在这里</b>。套着<b>淡红虚线圈</b>的格子是这一步能踩的去向；其中<b>转着朱红圈、头顶写「▸ 下一站」</b>的那一格是主推的去向（大关卡优先）。三种点法都行：<b>点格子</b>、点地图左下角的<b>「下一站」药丸</b>、按<b>空格</b>；下一站跑出视野时，屏幕边上会亮起<b>红箭头</b>，点箭头同样过去。不相邻的点不动。</li>
         <li>事件分三档：<b>明</b>（图标写清类型，可预判）、<b>暗</b>（只显示 ?，走到才弹窗）、<b>动</b>（行进途中随机触发，10 类：敌袭、埋伏、老乡问路、疫病、逃兵、涨水、收容队、担架、断水、驮马）。同一类有好几种说法，<b>出没读过的先出</b>；一类一局最多两次，也不会跟上一格连着重复；刚出过事，下一格的概率还会压低。</li>
         <li>选项<b>不标价</b>：先按你的判断按下去。按完之后<b>不跳转</b> —— 选了的和没选的那几条，各自下面亮起资源增减，原地停几秒给你看（点任意处提前继续），再进结算。追兵翻倍、断粮饿倒、民族地区多绕的路，这些实际落账要下一页才对得上。</li>
         <li>大关卡通关后进入剧情翻面，英雄之名<b>刻上木牌</b>，同时解锁史料词条。</li>
@@ -1584,7 +1705,7 @@ const Pages = {
         <p class="cg dim">出发时同村三个：通信员小谢、警卫员老范、担架队长三伢子。走到终章时，只剩一个。</p>
         <p class="src">史实分级 A／R／? ；地图为路线示意图。数据与文案出处见「史料与出处」。</p>`,
       actions: [
-        { text: '开始这一程', kind: 'primary', onClick: () => { setTimeout(() => Game.enter(NODE_BY_ID['g1']), 120); } },
+        { text: '开始这一程', kind: 'primary', onClick: () => { setTimeout(() => Pages.notes(() => Game.enter(NODE_BY_ID['g1'])), 120); } },
         { text: '先看规则', kind: 'ghost', onClick: () => { setTimeout(() => Pages.help(), 120); return true; } }
       ]
     });
@@ -1649,7 +1770,18 @@ const Ending = {
 Game.debug = {
   Store, Router, Hud, MapView, Sin, Flow, Pages, Ending, History, Toast, Game,
   NODE_BY_ID, EDGES, NODES, MOVE_EVENTS, CARDS, ITEMS, REGIONS, HISTORY, DISCIPLINE, ENEMIES, COMRADES,
-  CARD_FX, ADJ, RES, BALANCE
+  CARD_FX, ADJ, RES, BALANCE,
+  /* 只想看某一条行进事件怎么写出来的时候用：Game.debug.event('mv_mule', 1)
+     第二个下标 0 是事件正文，1..n 是 variants 里的第几条；不写就随机。 */
+  event(id, vi) {
+    const m = MOVE_EVENTS.find(x => x.id === id);
+    if (!m) { Toast.show('没有这条事件：' + id); return null; }
+    const v = vi == null ? null : (vi === 0 ? {} : m.variants[vi - 1]);
+    if (vi != null && !v) { Toast.show('这条事件没有第 ' + vi + ' 个变体'); return null; }
+    const s = Object.assign({}, m, v || {}, { options: (v && v.options) || m.options });
+    Game.afterArrive(NODE_BY_ID[Store.s.at], s);
+    return s;
+  }
 };
 window.Game = Game;
 window.addEventListener('DOMContentLoaded', () => Game.boot());
