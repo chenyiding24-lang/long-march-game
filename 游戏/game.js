@@ -35,13 +35,14 @@ const RES = {
 const BALANCE = {
   init:        { men: 100, food: 12, window: 7, trust: 40 },
   march:       { food: -1, window: -1 },   /* 每走一格的固定支出 */
-  gateGain:    { food: 2, window: 2 },     /* 大关卡第一次打下来：缴获 + 休整 */
+  gateSpoils:  { food: 3, window: 3, men: 6 }, /* 大关卡第一次打下来：粮／时／兵三样只能带一样 */
   hungerLoss:  3,                          /* 断粮那一格多折的建制 */
   pursuitGrace: 3,                         /* 时窗归零打完遭遇战，甩开尾巴挣回的天数 */
   eventP: 0.24, eventCooldownP: 0.10,      /* 行进突发事件：常态概率 / 上一格刚出过事的概率 */
   charity:     { trust: 70, food: 1, max: 3 }, /* 民心够高又真断了粮：沿途百姓接济，一局至多三次 */
   comradeCap:  6,                              /* 战友卡同时在队的上限：开局四人 + 中途收编 */
-  mateSave:    4                               /* 一个战友一次最多替你挡下的建制数 */
+  mateSave:    2,                              /* 一个战友一次最多替你挡下的建制数 */
+  fallLimit:   3                               /* 一程里第几次打散/违纪就不再有收容队 */
 };
 
 /* 手法卡的真实效果（未列出的项在卡面上标”本版仅叙事”） */
@@ -710,10 +711,11 @@ const Game = {
     this.bindChrome();
     Hud.render();
     if (!Store.s.flags.seenIntro) { Store.s.flags.seenIntro = true; Store.save(); Pages.intro(); }
-    else {
+    else if (!Store.s.flags.sawNotes) {
+      /* 老存档第一次补看须知：这条提示会被弹窗压住，等看完再说 */
+      setTimeout(() => Pages.notes(), 700);
+    } else {
       Toast.show(MapView.coarse ? '单指拖动地图 · 双指捏合缩放 · 点击前方节点行军' : '拖动地图可移动视野 · 滚轮缩放 · 点击前方节点行军');
-      /* 老存档第一次也会补看一次须知，看过就不再拦路 */
-      if (!Store.s.flags.sawNotes) setTimeout(() => Pages.notes(), 700);
     }
   },
 
@@ -1246,17 +1248,45 @@ const Game = {
       if (node.carve.blank) s.board.blanks += node.carve.blank;
     }
     (node.gainCards || []).forEach(id => { if (CARDS[id] && s.hand.indexOf(id) < 0) s.hand.push(id); });
-    /* 大关卡第一次打下来才有缴获与休整：主走廊 42 格的固定支出靠这一段回补 */
-    if (first && node.kind === 'gate') {
-      const g = BALANCE.gateGain;
-      this.apply({ food: g.food, window: g.window });
-      s.flags.lastNotes = (s.flags.lastNotes || []).concat(['拿下这一处，缴获与休整：粮 +' + g.food + ' · 时 +' + g.window]);
-      const ld = s.flags.lastDelta || { men: 0, food: 0, window: 0, trust: 0 };
-      ld.food = (ld.food || 0) + g.food; ld.window = (ld.window || 0) + g.window;
-      s.flags.lastDelta = ld;
-      Hud.flash({ food: g.food, window: g.window });
-    }
+    /* 大关卡第一次打下来才有缴获与休整：主走廊 42 格的固定支出靠这一段回补。
+       粮／时／兵三样只能带一样 —— 这是四条资源之间唯一一次真正的交换。 */
+    if (first && node.kind === 'gate') { this.gateSpoils(node); return; }
     this.postChoice(node);
+  },
+
+  gateSpoils(node) {
+    const g = BALANCE.gateSpoils, s = Store.s;
+    let picked = false;
+    const take = (want, label) => {
+      if (picked) return true;
+      picked = true;
+      const before = { men: s.men, food: s.food, window: s.window, trust: s.trust };
+      this.apply(want);
+      const real = {};
+      Object.keys(want).forEach(k => { const v = s[k] - before[k]; if (v) real[k] = v; });
+      const txt = ['men', 'food', 'window', 'trust'].filter(k => real[k])
+        .map(k => RES[k].label + ' +' + real[k]).join(' · ');
+      s.flags.lastNotes = (s.flags.lastNotes || []).concat([
+        label + '：' + (txt || '这一样已经到了上限，什么也没多出来')
+      ]);
+      const ld = s.flags.lastDelta || { men: 0, food: 0, window: 0, trust: 0 };
+      Object.keys(real).forEach(k => { ld[k] = (ld[k] || 0) + real[k]; });
+      s.flags.lastDelta = ld;
+      Hud.flash(real); Store.save();
+      Router.closeAll();
+      this.postChoice(node);
+      return true;
+    };
+    Router.open({
+      title: '缴获与休整', kicker: node.name + ' · 三样只能带一样', size: 'mid', blocking: true, closable: false,
+      html: `<p class="lead">打下来这一处，院子里堆着缴获，队伍也争到半天空当。可带走的只够一样。</p>
+        <p class="note-hint">现在：兵 ${s.men} · 粮 ${s.food} · 时 ${s.window}</p>`,
+      actions: [
+        { text: `先把口粮运走（粮 +${g.food}）`, kind: 'primary', onClick: () => take({ food: g.food }, '缴获先紧着口粮') },
+        { text: `连夜赶路，抢回时间（时 +${g.window}）`, kind: 'ghost', onClick: () => take({ window: g.window }, '连夜赶路，把追兵甩远') },
+        { text: `就地整编掉队的人（兵 +${g.men}）`, kind: 'ghost', onClick: () => take({ men: g.men }, '就地整编') }
+      ]
+    });
   },
 
   /* 突发事件结算后：先收违纪的账，再进目的地 */
@@ -1419,6 +1449,7 @@ const Sin = {
           ? { title:'账对不上', body:'报上去的数与实际对不上。整编时你的师被并进了别的建制,番号在名单上消失。' }
           : { title:'没有水', body:'后面的村寨关了门。侦察的人回来说：井边没有人,粮没有,带路的人也没有。队伍在雨里走了两天,找不出一条过河的路。' }
       ;
+    const last = Store.s.runsFailed + Store.s.runsWarn >= BALANCE.fallLimit - 1;
     Router.open({
       title: '多行不义必自毙', kicker: '警示 · ' + scene.title, size: 'wide', cinematic: true, blocking: true, closable: false,
       html: `
@@ -1432,10 +1463,12 @@ const Sin = {
           <p>红军靠铁的纪律走到陕北。抢粮不留据的队伍，在后面的藏区连一碗水都喝不上；丢下伤员的队伍，再没人肯为它当向导；虚报减员的建制，在整编时被抹掉番号。<a data-link="history" data-hid="h_jilü" href="#">三大纪律八项注意</a> <span class="grade g-A">A</span> 另见史料页「草地筹粮的两面性」「纪律的一块小石头」「崔古仓开仓」。</p>
           <h4>④ 你的名字挂在警示区</h4>
           <p>这块木牌进了「歪名」档案：<b>此处记的是走错的路，不是走错的人。</b>牌上已经刻下的战友名字一个都不抹——他们没有做错任何事。</p>
-          <h4>⑤ 再走一次</h4>
-          <p class="invite">从你还没走错的那一步开始。下一次你路过同样的路口，按钮上会多一行小字。</p>
+          <h4>⑤ ${last ? '这一程到这里为止' : '再走一次'}</h4>
+          <p class="invite">${last
+            ? '收容队不会再来第三次。木牌挂上墙，名字一个不清零。'
+            : '从你还没走错的那一步开始。下一次你路过同样的路口，按钮上会多一行小字。'}</p>
         </div>`,
-      actions: [{ text: '记下这一页', kind: 'warn', onClick: () => { Flow.warnEnd(type); return true; } }]
+      actions: [{ text: '记下这一页', kind: 'warn', onClick: () => { Flow.warnEnd(type, node); return true; } }]
     });
   }
 };
@@ -1444,6 +1477,7 @@ const Sin = {
 const Flow = {
   nextCheng(node) {
     const s = Store.s;
+    if (s.runsFailed + s.runsWarn >= BALANCE.fallLimit - 1) { Ending.fall(node, 'scatter'); return; }
     Store.meta.wall.push(this.boardSnapshot('正常行军 · 部队打散'));
     Store.meta.plays += 1;
     Router.open({
@@ -1454,8 +1488,9 @@ const Flow = {
       actions: [{ text: '接住下一支队伍', kind: 'primary', onClick: () => this.revive(false) }]
     });
   },
-  warnEnd(type) {
+  warnEnd(type, node) {
     const s = Store.s;
+    if (s.runsFailed + s.runsWarn >= BALANCE.fallLimit - 1) { Ending.fall(node || NODE_BY_ID[s.at], 'warn', type); return; }
     Store.meta.warnWall.push(this.boardSnapshot('违纪自毙 · ' + (DISCIPLINE[type] || {}).label));
     Store.meta.plays += 1;
     Store.save();
@@ -1531,7 +1566,7 @@ const Pages = {
       <ul>
         <li>底部「<b>手法卡</b>」能在抉择里附一张卡减折损，一局一张；「<b>身边人</b>」是被动，替你挡一次作战或冻饿的判定 —— 挡不住违纪的账。</li>
         <li>拖地图：按住拖动（从格子上按住也能拖），滚轮缩放，<kbd>Tab</kbd> 或点「远望全图」看整条路线。触屏：单指拖、双指捏合缩放。</li>
-        <li>大关卡打下来会<b>缴获回补</b>粮与时，并把英雄之名刻上木牌、解锁一条史料。</li>
+        <li>大关卡打下来会有一次<b>缴获与休整</b>：<b>粮 / 时 / 兵三样只能带一样</b>，由你在当场选；同时把英雄之名刻上木牌、解锁一条史料。</li>
       </ul>
       <h3>卡住了怎么办</h3>
       <ul>
@@ -1558,8 +1593,8 @@ const Pages = {
       <h3>四条资源</h3>
       <ul>
         <li><b>兵</b>：建制完整度，归零即“下一程”。不能直接买回来——整补要时间、要民心。</li>
-        <li><b>粮</b>：可撑天份。每走一格 -1；<b>归零那一格多饿倒 ${BALANCE.hungerLoss} 支</b>。打下一个大关卡缴获回补 <b>粮 +${BALANCE.gateGain.food}</b>；真断了粮而<b>民 ≥${BALANCE.charity.trust}</b>，沿途百姓接济 ${BALANCE.charity.food} 天，一局最多 ${BALANCE.charity.max} 次。</li>
-        <li><b>时</b>：追兵窗口。每走一格 -1；归零只<b>压成一格</b> —— 那一格折损翻倍、多半打一场遭遇战，打完甩开尾巴挣回 <b>时 +${BALANCE.pursuitGrace}</b>。大关卡打完再回补 <b>时 +${BALANCE.gateGain.window}</b>。</li>
+        <li><b>粮</b>：可撑天份。每走一格 -1；<b>归零那一格多饿倒 ${BALANCE.hungerLoss} 支</b>。大关卡打下来可以<b>把缴获先紧着口粮（粮 +${BALANCE.gateSpoils.food}）</b>—— 粮、时、兵三样只能带一样；真断了粮而<b>民 ≥${BALANCE.charity.trust}</b>，沿途百姓接济 ${BALANCE.charity.food} 天，一局最多 ${BALANCE.charity.max} 次。</li>
+        <li><b>时</b>：追兵窗口。每走一格 -1；归零只<b>压成一格</b> —— 那一格折损翻倍、多半打一场遭遇战，打完甩开尾巴挣回 <b>时 +${BALANCE.pursuitGrace}</b>。大关卡也可以选择<b>连夜赶路，时 +${BALANCE.gateSpoils.window}</b>。</li>
         <li><b>民</b>：沿途人心。低于 20 时，彝海、崔古仓、草地筹粮的向导与借粮选项<b>全部锁死</b>，视野骤缩；高于 ${BALANCE.charity.trust} 时，断粮那格百姓肯分粮。</li>
       </ul>
       <h3>民心的账是延迟的</h3>
@@ -1762,6 +1797,41 @@ const Ending = {
             setTimeout(() => Pages.wall(), 300);
           } }
       ]
+    });
+  },
+
+  /* 第三次打散／违纪：收容队不会再来。这是唯一一个"走不到"的终章 */
+  fall(node, cause, type) {
+    const s = Store.s;
+    const warn = cause === 'warn';
+    const np = (node && node.name) || '路上';
+    if (warn) Store.meta.warnWall.push(Flow.boardSnapshot('违纪自毙 · ' + ((DISCIPLINE[type] || {}).label || '')));
+    else Store.meta.wall.push(Flow.boardSnapshot('正常行军 · 部队打散'));
+    Store.meta.plays += 1;
+    const head = warn
+      ? `<p class="cg big">你的番号在整编名册上被划掉了。</p>
+         <p class="cg">队伍还在走，人还活着，只是带这支队伍的人换成了别人。</p>
+         <p class="cg dim">红军靠铁的纪律走到陕北。纪律不是写在墙上的条文，是借粮留下借据、不拿群众一针一线这些具体的事。这笔账迟到了一阵，但它一定会到。</p>`
+      : `<p class="cg big">吴起镇的窑洞前，没有等到你们这一支。</p>
+         <p class="cg">队伍在突围中被切断了。走得动的人各自往北，走不动的人把枪埋进土里，把木牌交给一个老乡，请他记着这些名字。</p>
+         <p class="cg dim">长征不是一支队伍走完的。留在南方苏区的那些人，后来成了坚持三年游击战争的红军——他们没有走到陕北，但他们走的那一段，也是这条路的一部分。</p>`;
+    Router.closeAll();
+    Router.open({
+      title: '没有走到吴起镇', kicker: '终章 · 行至' + np, size: 'wide', cinematic: true, closable: false, blocking: true,
+      html: head + `<p class="costline">行至 ${esc(np)} · 走过 ${Object.keys(s.visited).length} 格 · 木牌 ${s.board.names.length} 个名字 · 违纪标记 ${s.sin}</p>
+        <p class="note-hint">这一程到这里为止。木牌挂上名单墙，名字一个不清零。</p>`,
+      actions: [{
+        text: '把木牌挂上名单墙', kind: 'primary',
+        onClick: () => {
+          Store.meta.best = Math.max(Store.meta.best, s.board.names.length);
+          const st = Store.defaultState();
+          st.flags.seenIntro = true; st.flags.sawNotes = true;
+          Store.s = st; Store.save();
+          Router.closeAll(); MapView.recenter(); Hud.render();
+          Toast.show('牌已挂上墙。要不要再走一次，走到吴起镇？');
+          setTimeout(() => Pages.wall(), 300);
+        }
+      }]
     });
   }
 };

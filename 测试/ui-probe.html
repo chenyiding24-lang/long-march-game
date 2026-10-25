@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>UI 探针</title>
+<link rel="stylesheet" href="../游戏/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar"><div class="brand"><span class="brand-seal">长征</span><h1>万水千山</h1><span class="brand-sub">UI 探针</span></div>
+    <nav id="topnav">
+      <button class="navlink" id="nav-cards">手法卡与道具</button><button class="navlink" id="nav-board">木牌</button>
+      <button class="navlink" id="nav-wall">名单墙</button><button class="navlink" id="nav-history">史料与出处</button>
+      <button class="navlink" id="nav-help">规则手册</button><button class="navlink dim" id="reset-btn">清空存档</button>
+    </nav></header>
+  <div id="hud"></div>
+  <main id="viewport">
+    <div id="map"><svg id="art-layer" viewBox="0 0 2000 4600" width="2000" height="4600"></svg>
+      <svg id="fog-ring" width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none"><circle id="sight-ring" cx="0" cy="0" r="0"/></svg></div>
+    <div id="fog"></div><div id="vignette"></div>
+    <div class="map-tools"><button id="far-toggle">远望全图</button><button id="center-btn">回到部队</button>
+      <span class="zoom" id="zoom-label">30%</span><button id="next-pill" class="next-pill" hidden>下一站</button>
+      <button id="notes-btn" class="map-seal">须知</button></div>
+    <div id="next-arrow"></div><div class="map-note"></div>
+    <div class="compass"><span>北</span><i></i><em></em></div>
+    <div class="bottom-trays"><div class="tray"><span class="tray-name">手法卡</span><div id="hand-tray"></div></div>
+      <div class="tray"><span class="tray-name">身边人</span><div id="comrade-tray"></div></div></div>
+  </main>
+  <div id="modal-root"></div><div id="toast"></div>
+  <footer id="footbar"><span>探针</span><span></span></footer>
+</div>
+<pre id="geo" style="position:fixed;left:0;bottom:0;z-index:99;font:10px monospace;color:#0f0;background:#0009;max-width:100%;white-space:pre-wrap">-</pre>
+<script src="../游戏/data.js"></script>
+<script src="../游戏/game.js"></script>
+<script>
+(function () {
+  const q = new URLSearchParams(location.search).get('scene') || 'spoils';
+  function show() {
+    const D = window.Game.debug;
+    D.Router.closeAll();
+    const s = D.Store.s;
+    s.flags.seenIntro = true; s.flags.sawNotes = true;
+    if (q === 'spoils') { s.food = 2; s.window = 1; s.men = 62; D.Hud.render(); D.Game.gateSpoils(D.NODE_BY_ID['g11']); }
+    else if (q === 'fall') { s.men = 0; s.visited = { g1: 1, g2: 1, g3: 1, g4: 1 }; s.board.names = ['小谢', '老范', '三伢子']; s.sin = 0; D.Ending.fall(D.NODE_BY_ID['g4'], 'scatter'); }
+    else if (q === 'warn') { s.sin = 4; s.runsFailed = 2; D.Sin.collect(D.NODE_BY_ID['g4']); }
+    else if (q === 'notes') { D.Pages.notes(); }
+    document.title = 'READY';
+  }
+  function geo() {
+    const vw = window.innerWidth;
+    const m = document.querySelector('.modal');
+    const r = m && m.getBoundingClientRect();
+    const mask = document.querySelector('.modal-mask');
+    const mr = mask && mask.getBoundingClientRect();
+    const over = [];
+    document.querySelectorAll('#app *').forEach(function (el) {
+      const b = el.getBoundingClientRect();
+      if (b.right > vw + 1 && b.width > 0) over.push((el.id || el.className || el.tagName) + ':' + Math.round(b.left) + '~' + Math.round(b.right));
+    });
+    document.getElementById('geo').textContent = JSON.stringify({
+      vw: vw, docW: document.documentElement.scrollWidth, bodyW: document.body.scrollWidth,
+      mask: mr && [Math.round(mr.left), Math.round(mr.right), Math.round(mr.width)],
+      modal: r && [Math.round(r.left), Math.round(r.right), Math.round(r.width)],
+      over: over.slice(0, 6)
+    });
+  }
+  window.addEventListener('load', function () {
+    setTimeout(show, 120);
+    setTimeout(function () { show(); geo(); }, 1200);
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>跑测台</title>
+<link rel="stylesheet" href="../游戏/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand"><span class="brand-seal">长征</span><h1>万水千山</h1><span class="brand-sub">跑测台</span></div>
+    <nav id="topnav">
+      <button class="navlink" id="nav-cards">手法卡与道具</button>
+      <button class="navlink" id="nav-board">木牌</button>
+      <button class="navlink" id="nav-wall">名单墙</button>
+      <button class="navlink" id="nav-history">史料与出处</button>
+      <button class="navlink" id="nav-help">规则手册</button>
+      <button class="navlink dim" id="reset-btn">清空存档</button>
+    </nav>
+  </header>
+  <div id="hud" aria-label="资源状态"></div>
+  <main id="viewport" aria-label="长征路线地图">
+    <div id="map">
+      <svg id="art-layer" viewBox="0 0 2000 4600" width="2000" height="4600"></svg>
+      <svg id="fog-ring" width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none"><circle id="sight-ring" cx="0" cy="0" r="0"/></svg>
+    </div>
+    <div id="fog"></div><div id="vignette"></div>
+    <div class="map-tools">
+      <button id="far-toggle">远望全图</button>
+      <button id="center-btn">回到部队</button>
+      <span class="zoom" id="zoom-label">30%</span>
+      <button id="next-pill" class="next-pill" hidden>下一站</button>
+      <button id="notes-btn" class="map-seal" title="玩家须知" aria-label="玩家须知">须知</button>
+    </div>
+    <div id="next-arrow" aria-hidden="true"></div>
+    <div class="map-note"></div>
+    <div class="compass"><span>北</span><i></i><em></em></div>
+    <div class="bottom-trays">
+      <div class="tray"><span class="tray-name">手法卡</span><div id="hand-tray"></div></div>
+      <div class="tray"><span class="tray-name">身边人</span><div id="comrade-tray"></div></div>
+    </div>
+  </main>
+  <div id="modal-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <footer id="footbar"><span>跑测台</span><span></span></footer>
+</div>
+<pre id="bench-out">RUNNING</pre>
+<script src="../游戏/data.js"></script>
+<script src="../游戏/game.js"></script>
+<script src="balance-bench.js"></script>
+<script>
+(function () {
+  function start() {
+    try {
+      localStorage.clear();
+      const out = { mateSave: window.Game.debug.BALANCE.mateSave, gateSpoils: window.Game.debug.BALANCE.gateSpoils };
+      ['greedy', 'smart', 'random'].forEach(function (p) { out[p] = Bench.run(p, 5); });
+      out.sin = Bench.run('sin', 4);
+      out.hot = Bench.hotspots ? Bench.hotspots().slice(0, 6) : null;
+      document.getElementById('bench-out').textContent = JSON.stringify(out, null, 1);
+      document.title = 'DONE';
+    } catch (e) {
+      document.getElementById('bench-out').textContent = 'ERR ' + (e && e.stack || e);
+      document.title = 'ERR';
+    }
+  }
+  window.addEventListener('load', function () { setTimeout(start, 60); });
+})();
+</script>
+</body>
+</html>

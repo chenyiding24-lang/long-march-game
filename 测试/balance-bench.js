@@ -119,6 +119,22 @@ window.Bench = (function () {
       book(st, 'sit');
       return true;
     }
+    if (kick.indexOf('缴获') >= 0 || h2.indexOf('缴获') >= 0) {
+      /* 缴获三选一：按当前最短缺的那样拿 */
+      const s = Store.s;
+      const want = pol === 'random'
+        ? ['口粮', '连夜赶路', '整编'][Math.floor(Math.random() * 3)]
+        : (s.food <= 4 ? '口粮' : (s.window <= 2 ? '连夜赶路' : (s.men < s.menCap - 6 ? '整编' : '口粮')));
+      const b = byText(want) || acts[0];
+      st.spoils = st.spoils || {}; st.spoils[want] = (st.spoils[want] || 0) + 1;
+      b.click(); book(st, 'spoils');
+      return true;
+    }
+    if (h2.indexOf('没有走到吴起镇') >= 0) {
+      st.end = st.end || snap(); st.failEnd = true; st.stopped = true;
+      (byText('把木牌挂上名单墙') || acts[0]).click();
+      return true;
+    }
     if (h2.indexOf('下一程') >= 0) { (byText('接住下一支队伍') || acts[0]).click(); st.revives++; book(st, 'revive'); return true; }
     if (h2.indexOf('念名字') >= 0) {
       st.wins++; st.end = snap(); st.endAt = Store.s.at;
@@ -156,7 +172,7 @@ window.Bench = (function () {
     for (let it = 0; it < (maxIt || 600); it++) {
       const root = document.getElementById('modal-root');
       const wrap = root ? root.lastElementChild : null;
-      if (wrap) { if (!step(wrap.querySelector('.modal'), pol, st)) { st.stuck = true; break; } continue; }
+      if (wrap) { if (!step(wrap.querySelector('.modal'), pol, st)) { st.stuck = true; break; } if (st.stopped) break; continue; }
       if (Store.meta.wins > 0) { if (!st.end) st.end = snap(); break; }
       const t = nextTarget();
       if (!t) { st.exhausted = true; break; }
@@ -205,6 +221,8 @@ window.Bench = (function () {
       pinch: { 断粮格: avg(x => x.zeroFood), 压顶格: avg(x => x.crisis), 折损翻倍格: avg(x => x.doubled),
         突发事件数: avg(x => x.events), 低民心格: avg(x => x.lowTrust), 违纪峰值: avg(x => x.sinMax), 借粮次数: avg(x => x.charity) },
       stuck: out.filter(x => x.stuck).length, exhausted: out.filter(x => x.exhausted).length,
+      failEnd: out.filter(x => x.failEnd).length,
+      spoils: out.reduce((a, x) => { Object.keys(x.spoils || {}).forEach(k => { a[k] = (a[k] || 0) + x.spoils[k]; }); return a; }, {}),
       each: out.map(x => ({ 停在: x.reached ? '吴起镇' : x.endName, 兵: x.end.men, 粮: x.end.food, 时: x.end.window, 民: x.end.trust,
         名字: x.end.names, 违纪: x.end.sin, 最低兵: x.minMen + '@' + x.minMenAt, 打散: x.打散, 收账: x.warnEnds, 行军: x.marches, 胜: x.reached }))
     };
