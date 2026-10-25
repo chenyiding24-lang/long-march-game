@@ -57,7 +57,15 @@
       const q = new URLSearchParams(location.search);
       const only = q.get('only');            /* ?only=random&games=200：只跑一种策略，跑大样本 */
       const games = Math.max(1, +(q.get('games') || 5));
-      const out = { mateSave: window.Game.debug.BALANCE.mateSave, gateSpoils: window.Game.debug.BALANCE.gateSpoils };
+      /* ?set=init.men=72,init.food=9,hungerLoss=6,gateSpoils.men=3：临时改 BALANCE 试难度，不改代码 */
+      const set = q.get('set');
+      if (set) set.split(',').forEach(function (kv) {
+        const p = kv.split('='); if (p.length !== 2) return;
+        const keys = p[0].split('.'); let o = window.Game.debug.BALANCE;
+        while (keys.length > 1) o = o[keys.shift()];
+        o[keys[0]] = Number(p[1]);
+      });
+      const out = { balance: JSON.parse(JSON.stringify(window.Game.debug.BALANCE)) };
       if (only) {
         only.split(',').forEach(function (p) { out[p] = Bench.run(p, games); });
         /* 把「几条命通关」要的概率算出来：p=单局通关率，按独立重复算期望与分位 */
