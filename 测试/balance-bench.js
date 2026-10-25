@@ -44,7 +44,7 @@ window.Bench = (function () {
     if (o.sin) v += pol === 'sin' ? 45 : -65;
     if (o.gainCards || o.item || o.outcomeCard) v += 3;
     if (pol === 'mate' && o.recruit) v += 30;   /* 专门跑收编路线 */
-    if (pol === 'random') v = Math.random();
+    if (pol === 'random' || pol === 'chaos') v = Math.random();
     return v;
   };
   /* 只在「这一格要掉很多兵」时押手法卡 */
@@ -90,7 +90,9 @@ window.Bench = (function () {
       let bi = 0, bv = -1e9;
       opts.forEach((b, i) => { const o = list[+b.dataset.opt]; if (!o) return; const v = optScore(o, pol); if (v > bv) { bv = v; bi = i; } });
       const chosen = list[+opts[bi].dataset.opt];
-      if (pol !== 'greedy' && chosen) { const cid = cardFor(chosen); const chip = cid && modal.querySelector('[data-pick="' + cid + '"]'); if (chip) { chip.click(); st.cardsUsed++; } }
+      /* chaos = 每个按钮都随机按：手法卡也只在一半的情况下想起来用 */
+      const tryCard = pol === 'chaos' ? Math.random() < .5 : pol !== 'greedy';
+      if (tryCard && chosen) { const cid = cardFor(chosen); const chip = cid && modal.querySelector('[data-pick="' + cid + '"]'); if (chip) { chip.click(); st.cardsUsed++; } }
       st.choiceNodes++;
       opts[bi].click();
       book(st, 'choice');
@@ -104,7 +106,7 @@ window.Bench = (function () {
     if (kick.indexOf('战友') >= 0) {
       const refuse = byText('谁也别顶');
       const accept = [...acts].find(b => b !== refuse && txt(b).indexOf('顶上去') >= 0);
-      const use = accept && (pol === 'smart' ? Store.s.comrades.length > 1 : pol === 'greedy');
+      const use = accept && (pol === 'chaos' ? Math.random() < .5 : pol === 'smart' ? Store.s.comrades.length > 1 : pol === 'greedy');
       st.mateOffers++;
       if (use && accept) { accept.click(); st.matesLost++; } else if (refuse) refuse.click(); else acts[0].click();
       book(st, 'mate');
@@ -112,7 +114,9 @@ window.Bench = (function () {
     }
     if (kick.indexOf('坐下判定') >= 0) {
       const skip = byText('不坐下'), sit = byText('坐下歇一口气'), up = byText('不坐，继续走');
-      if (pol === 'reckless' && sit) { sit.click(); st.satDown++; }
+      const sitActs = [skip, sit, up].filter(Boolean);
+      if (pol === 'chaos') { const pick = sitActs[Math.floor(Math.random() * sitActs.length)] || acts[0]; pick.click(); if (pick === sit) st.satDown++; else if (pick === skip) st.sitSkipped++; }
+      else if (pol === 'reckless' && sit) { sit.click(); st.satDown++; }
       else if (skip) { skip.click(); st.sitSkipped++; }
       else (up || acts[0]).click();
       st.sits++;
@@ -122,7 +126,7 @@ window.Bench = (function () {
     if (kick.indexOf('缴获') >= 0 || h2.indexOf('缴获') >= 0) {
       /* 缴获三选一：按当前最短缺的那样拿 */
       const s = Store.s;
-      const want = pol === 'random'
+      const want = pol === 'random' || pol === 'chaos'
         ? ['口粮', '连夜赶路', '整编'][Math.floor(Math.random() * 3)]
         : (s.food <= 4 ? '口粮' : (s.window <= 2 ? '连夜赶路' : (s.men < s.menCap - 6 ? '整编' : '口粮')));
       const b = byText(want) || acts[0];

@@ -54,9 +54,35 @@
   function start() {
     try {
       localStorage.clear();
+      const q = new URLSearchParams(location.search);
+      const only = q.get('only');            /* ?only=random&games=200：只跑一种策略，跑大样本 */
+      const games = Math.max(1, +(q.get('games') || 5));
       const out = { mateSave: window.Game.debug.BALANCE.mateSave, gateSpoils: window.Game.debug.BALANCE.gateSpoils };
-      ['greedy', 'smart', 'random'].forEach(function (p) { out[p] = Bench.run(p, 5); });
-      out.sin = Bench.run('sin', 4);
+      if (only) {
+        only.split(',').forEach(function (p) { out[p] = Bench.run(p, games); });
+        /* 把「几条命通关」要的概率算出来：p=单局通关率，按独立重复算期望与分位 */
+        const runs = window.__BENCH.slice(-games * only.split(',').length);
+        const wins = runs.filter(function (r) { return r.reached; });
+        const fails = runs.filter(function (r) { return !r.reached; });
+        const p = wins.length / runs.length;
+        out.summary = {
+          局数: runs.length, 通关: wins.length, 通关率: +p.toFixed(3),
+          期望命数: p ? +(1 / p).toFixed(2) : null,
+          中位命数: p && p < 1 ? Math.ceil(Math.log(.5) / Math.log(1 - p)) : (p === 1 ? 1 : null),
+          "10% 概率内通关": p && p < 1 ? Math.ceil(Math.log(.1) / Math.log(1 - p)) : (p === 1 ? 1 : null),
+          失败原因: {
+            违纪终章: fails.filter(function (r) { return r.failEnd && r.warnEnds > 0; }).length,
+            打散终章: fails.filter(function (r) { return r.failEnd && !r.warnEnds; }).length,
+            卡住: fails.filter(function (r) { return !r.failEnd && r.stuck; }).length,
+            走不动: fails.filter(function (r) { return !r.failEnd && r.exhausted; }).length
+          },
+          通关局终局兵: wins.length ? +(wins.reduce(function (a, r) { return a + r.end.men; }, 0) / wins.length).toFixed(1) : null,
+          通关局违纪峰值: wins.length ? +(wins.reduce(function (a, r) { return a + r.sinMax; }, 0) / wins.length).toFixed(1) : null
+        };
+      } else {
+        ['greedy', 'smart', 'random'].forEach(function (p) { out[p] = Bench.run(p, 5); });
+        out.sin = Bench.run('sin', 4);
+      }
       out.hot = Bench.hotspots ? Bench.hotspots().slice(0, 6) : null;
       document.getElementById('bench-out').textContent = JSON.stringify(out, null, 1);
       document.title = 'DONE';
