@@ -33,11 +33,11 @@ const RES = {
 /* 数值曲线：一处可调。跑测台（测试/balance-bench.js）按这几个常量反复校准，
    主走廊 42 格，每格固定支出 1 天粮 + 1 天时窗，所以要靠大关卡缴获与民心借粮回补。 */
 const BALANCE = {
-  init:        { men: 100, food: 12, window: 7, trust: 40 },
+  init:        { men: 100, food: 11, window: 6, trust: 40 },
   march:       { food: -1, window: -1 },   /* 每走一格的固定支出 */
-  gateSpoils:  { food: 3, window: 3, men: 6 }, /* 大关卡第一次打下来：粮／时／兵三样只能带一样 */
-  hungerLoss:  3,                          /* 断粮那一格多折的建制 */
-  pursuitGrace: 3,                         /* 时窗归零打完遭遇战，甩开尾巴挣回的天数 */
+  gateSpoils:  { food: 2, window: 2, men: 2 }, /* 大关卡第一次打下来：粮／时／兵三样只能带一样 */
+  hungerLoss:  6,                          /* 断粮那一格多折的建制 */
+  pursuitGrace: 2,                         /* 时窗归零打完遭遇战，甩开尾巴挣回的天数 */
   eventP: 0.24, eventCooldownP: 0.10,      /* 行进突发事件：常态概率 / 上一格刚出过事的概率 */
   charity:     { trust: 70, food: 1, max: 3 }, /* 民心够高又真断了粮：沿途百姓接济，一局至多三次 */
   comradeCap:  6,                              /* 战友卡同时在队的上限：开局四人 + 中途收编 */
@@ -792,7 +792,7 @@ const Game = {
       this.charityTop();
       Store.save(); MapView.render(); Hud.render();
       let surprise = null;
-      /* 追兵压顶：时窗归零只烧成一格 — 这一格代价翻倍、最多打一场遭遇战，然后甩开尾巴喘三天。
+      /* 追兵压顶：时窗归零只烧成一格 — 这一格代价翻倍、最多打一场遭遇战，然后甩开尾巴喘两天（pursuitGrace）。
          不能让它赖在零上，否则每格都必发敌袭，事件刷屏 + 折损全程翻倍。 */
       const crisis = s.window <= 0;
       s.flags.pursuitHot = crisis;
