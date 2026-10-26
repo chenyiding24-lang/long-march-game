@@ -450,6 +450,17 @@ body.modal-open .modal { max-height: 76vh; }
 .verbatim { font-style: italic; border-left: 3px solid var(--warn); padding-left: 12px; }
 .invite { color: #cbbda3 !important; }
 
+/* 制作与分工 */
+.team-row {
+  display: grid; grid-template-columns: auto auto; gap: 0 10px; align-items: baseline;
+  border-left: 2px solid rgba(122,111,87,.45); padding: 6px 0 6px 12px; margin-bottom: 6px;
+}
+.team-row b { font-size: 15.5px; letter-spacing: 2px; }
+.team-row .team-role { font-family: var(--sans); font-size: 11px; color: #8b8271; letter-spacing: 1px; }
+.team-row p { grid-column: 1 / -1; font-family: var(--sans); font-size: 12px; color: #5f594c; line-height: 1.85; margin: 4px 0 0; }
+.team-row.lead { border-left-color: var(--red); }
+.src.sign a { color: var(--river); }
+
 /* 史料页 */
 .hist-wrap { display: grid; grid-template-columns: 176px 1fr; gap: 18px; }
 .hist-index { display: flex; flex-direction: column; gap: 3px; border-right: 1px solid rgba(122,111,87,.35); padding-right: 10px; max-height: 60vh; overflow: auto; }
@@ -537,9 +548,13 @@ kbd { font-family: var(--sans); font-size: 11px; border: 1px solid #a2957a; bord
   #topnav::-webkit-scrollbar { display: none; }
   .navlink { padding: 8px 10px; min-height: 42px; font-size: 13px; white-space: nowrap; }
 
+  /* 页脚三行会吃掉地图高度：窄屏只留分级说明与名单，示意图声明回落到「规则手册」里 */
+  #footbar { font-size: 10px; gap: 4px 14px; }
+  #footbar span:nth-child(2) { display: none; }
+
   /* 军账：竖排面板在窄屏会盖掉半张地图，改成贴着顶栏下方的一行 */
   #hud {
-    top: auto; left: 8px; right: 8px; bottom: 92px; min-width: 0;
+    top: auto; left: 8px; right: 8px; bottom: var(--hud-bottom, 92px); min-width: 0;
     flex-direction: row; justify-content: space-between; align-items: center; gap: 8px;
     padding: 7px 12px;
   }

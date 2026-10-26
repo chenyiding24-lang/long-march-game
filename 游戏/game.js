@@ -174,6 +174,7 @@ const Router = {
         if (to === 'map') close();
         if (to === 'help') Pages.help();
         if (to === 'cards') Pages.cards();
+        if (to === 'team') Pages.credits();
       }
     });
     document.addEventListener('keydown', function onKey(ev) {
@@ -234,6 +235,13 @@ const Hud = {
       const m = COMRADES[id]; if (!m) return '';
       return `<button class="chip comrade" data-comrade="${id}" title="${esc(m.note)}"><b>${esc(m.name)}</b><i>${esc(m.role)}</i></button>`;
     }).join('');
+    this.fit();
+  },
+  /* 窄屏的军账是绝对定位的：底边距要按页脚与托盘的实际高度现算，写死会压住手法卡 */
+  fit() {
+    const f = $('#footbar'), t = $('.bottom-trays');
+    document.documentElement.style.setProperty('--hud-bottom',
+      ((f ? f.offsetHeight : 0) + (t ? t.offsetHeight : 0) + 10) + 'px');
   },
   flash(deltas) {
     Object.keys(deltas || {}).forEach(k => {
@@ -725,10 +733,16 @@ const Game = {
     $('#nav-history').addEventListener('click', () => Pages.history());
     $('#nav-cards').addEventListener('click', () => Pages.cards());
     $('#nav-help').addEventListener('click', () => Pages.help());
+    $('#nav-team').addEventListener('click', () => Pages.credits());
+    const byRole = {};
+    TEAM.forEach(t => { (byRole[t.role] = byRole[t.role] || []).push(t.name); });
+    $('#foot-team').textContent = `${COURSE.name} · ${COURSE.theme} ｜ ` +
+      Object.keys(byRole).map(r => `${r} ${byRole[r].join('、')}`).join(' · ');
     $('#far-toggle').addEventListener('click', () => MapView.setFar(!MapView.far));
     $('#center-btn').addEventListener('click', () => MapView.goTo(NODE_BY_ID[Store.s.at]));
     $('#reset-btn').addEventListener('click', () => Pages.confirmReset());
     $('#notes-btn').addEventListener('click', () => Pages.notes());
+    window.addEventListener('resize', () => Hud.fit());
     /* 下一站的两种点法：底部药丸 + 视口边缘箭头，都走同一套可达性判定 */
     $('#next-pill').addEventListener('click', () => this.goNext());
     $('#next-arrow').addEventListener('click', () => { if (!MapView.moved) this.goNext(); });
@@ -1541,6 +1555,14 @@ const History = {
 };
 
 /* ---------- Pages：链接式页面（全部走弹窗） ---------- */
+function signLine(withLink) {
+  const leader = TEAM.filter(t => t.role.indexOf('队长') >= 0).map(t => t.name).join('、');
+  const mates = TEAM.filter(t => t.role.indexOf('队长') < 0).map(t => t.name).join('、');
+  return `<p class="src sign">《${esc(COURSE.work)}》 · ${esc(COURSE.name)} · ${esc(COURSE.theme)}<br>` +
+    `制作：队长 ${esc(leader)} · 组员 ${esc(mates)}` +
+    (withLink === false ? '' : ' · <a data-link="team" href="#">制作与分工</a>') + '</p>';
+}
+
 const Pages = {
 
   /* 出发前的 30 秒须知；地图上的朱红章子可以重新打开 */
@@ -1611,6 +1633,52 @@ const Pages = {
       </ul>
       <p class="src">本作品为思政实践作业，史实分级 A（权威记载）/ R（回忆转述）/ ?（待核实）。地图为路线示意图，省界非精确边界。</p>`,
       actions: [{ text: '知道了', kind: 'primary' }]
+    });
+  },
+
+  /* 交作业时要给老师看的一页：选题理由、机制取舍、史料纪律、AI 辅助范围、未完成部分 */
+  credits() {
+    const rows = TEAM.map(t => `
+      <div class="team-row${t.role.indexOf('队长') >= 0 ? ' lead' : ''}">
+        <b>${esc(t.name)}</b><span class="team-role">${esc(t.role)}</span>
+        ${t.duty ? `<p>${esc(t.duty)}</p>` : ''}
+      </div>`).join('');
+    Router.open({
+      title: '制作与分工', kicker: COURSE.name, size: 'wide',
+      html: `
+      <h3>作业信息</h3>
+      <ul>
+        <li>课程：<b>${esc(COURSE.name)}</b>（${esc(COURSE.term)}）</li>
+        <li>选题：${esc(COURSE.theme)}</li>
+        <li>形式：${esc(COURSE.form)} —— 单文件网页游戏，本地双击即玩，无后端、无外链</li>
+      </ul>
+      <h3>为什么做这个</h3>
+      <p class="lead">九十年前那条路，容易被背成一串年份。这个作品把它换成一次要走的选择：兵、粮、时、民四样互相牵住，每按下一个选项，代价当场落在具体的人身上 —— 而不是落在分数上。</p>
+      <h3>机制与取舍</h3>
+      <ul>
+        <li><b>四条资源</b>：兵是建制完整度，粮是可撑的天份，时是追兵窗口，民是沿途人心。缺哪一条，最后都用「人」来结算。</li>
+        <li><b>选项不标价</b>：按下去之前不给数值，按完之后<b>每个选项旁边原地亮账</b>停几秒。先判断再看账，是为了不让人对着数字挑最便宜的那一项。</li>
+        <li><b>失败不写 Game Over</b>：部队打散是「下一程」，收容队把你接住，木牌上的名字不清零；三次走不到，才有「没有走到吴起镇」。</li>
+        <li><b>多行不义必自毙</b>：违纪选项可以选、当场有甜头，账延迟两三格才收，而且战友挡不住 —— 想让人自己算出纪律不是道德要求，是生存条件。</li>
+        <li><b>木牌与名单墙</b>：一块空白杉木牌从于都河背到吴起镇，宿营地和伤亡都刻在上面；重开的动机不是赢，是让更多人被人记住。</li>
+      </ul>
+      <h3>史料怎么核对</h3>
+      <ul>
+        <li>${HISTORY.length} 条史料逐条挂出处，三级标记：<span class="grade g-A">A</span> 权威记载 · <span class="grade g-R">R</span> 回忆转述 · <span class="grade g-?">?</span> 待核实。</li>
+        <li>核不到原文的只写来源名并标「待核实」，不补写、不编造；语文课文与文学创作不当作史实使用；两个「云贵川」不并成一个人。</li>
+        <li>数字口径见顶栏「<a data-link="help" href="#">规则手册</a>」与「<a data-link="history" href="#">史料与出处</a>」；地图为路线示意图，省界是手绘近似。</li>
+      </ul>
+      <h3>AI 辅助的范围</h3>
+      <ul>
+        <li>用在哪里：史料检索与出处整理、设计文档结构梳理、代码草稿、数值跑测脚本与曲线校准。</li>
+        <li>不靠它决定：选题、玩法机制与节点取舍、全部文案定稿、数值的最终口径 —— 这几项由本人判断并承担。</li>
+      </ul>
+      <h3>还没做完的</h3>
+      <p class="note-hint">终章目前只有「念名字」与「没有走到吴起镇」两段文本，设计稿里的「空格」「文物」两个结局条件尚未实现；CG 分镜只有文字，美术位与音频留空；名单墙还没有单局复盘页；难度数值仍在校准，未到定稿。</p>
+      <h3>制作名单</h3>
+      ${rows}
+      ${signLine(false)}`,
+      actions: [{ text: '关闭', kind: 'ghost' }]
     });
   },
 
@@ -1738,7 +1806,7 @@ const Pages = {
       html: `<p class="cg big">十月下旬，于都河上搭起浮桥。八万余人要在三个夜里渡完。</p>
         <p class="cg">你不是指挥全局的人，你是这支队伍的指挥员。你手里有一块空白杉木牌，用来记宿营地和伤亡名单。</p>
         <p class="cg dim">出发时同村三个：通信员小谢、警卫员老范、担架队长三伢子。走到终章时，只剩一个。</p>
-        <p class="src">史实分级 A／R／? ；地图为路线示意图。数据与文案出处见「史料与出处」。</p>`,
+        <p class="src">史实分级 A／R／? ；地图为路线示意图。数据与文案出处见「史料与出处」。</p>${signLine()}`,
       actions: [
         { text: '开始这一程', kind: 'primary', onClick: () => { setTimeout(() => Pages.notes(() => Game.enter(NODE_BY_ID['g1'])), 120); } },
         { text: '先看规则', kind: 'ghost', onClick: () => { setTimeout(() => Pages.help(), 120); return true; } }
@@ -1780,7 +1848,7 @@ const Ending = {
       html += `<p class="cg">最后放上来的是物件：泸定桥的十三根铁索、半截皮带、黄花草标本、盖了苏维埃财政印章的借据、缝进百褶裙夹层的队旗。</p>`;
     }
     html += `<p class="costline">这一程走完：兵 ${s.men} · 粮 ${s.food} · 民 ${s.trust} · 木牌 ${s.board.names.length} 个名字 · 违纪标记 ${s.sin}</p>
-      <p class="note-hint">红二十五军战斗员平均年龄不到十八岁。使他们过湘江、雪山、草地的，很多是孩子。</p>`;
+      <p class="note-hint">红二十五军战斗员平均年龄不到十八岁。使他们过湘江、雪山、草地的，很多是孩子。</p>${signLine()}`;
     Router.open({
       title: '念名字', kicker: '终章 · 1935.10.19 吴起镇', size: 'wide', cinematic: true, closable: false, blocking: true,
       html,
@@ -1819,7 +1887,7 @@ const Ending = {
     Router.open({
       title: '没有走到吴起镇', kicker: '终章 · 行至' + np, size: 'wide', cinematic: true, closable: false, blocking: true,
       html: head + `<p class="costline">行至 ${esc(np)} · 走过 ${Object.keys(s.visited).length} 格 · 木牌 ${s.board.names.length} 个名字 · 违纪标记 ${s.sin}</p>
-        <p class="note-hint">这一程到这里为止。木牌挂上名单墙，名字一个不清零。</p>`,
+        <p class="note-hint">这一程到这里为止。木牌挂上名单墙，名字一个不清零。</p>${signLine()}`,
       actions: [{
         text: '把木牌挂上名单墙', kind: 'primary',
         onClick: () => {

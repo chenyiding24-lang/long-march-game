@@ -66,6 +66,7 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 - `09-实现说明-v1可玩初版.md`、`10-数值曲线与适配-v2.md` 是实现记录，描述当前代码。
 - `10` 里有一节明确写了**当前数值仍待用户拍板**（08 §13 的 7 个问题，尤其初始资源和追兵强度）。现在代码里的 100 兵 / 12 天粮 / 7 天时窗 / 40 民心是**暂定值**，不是定稿。
 - `04-红军故事素材库.md` 是素材，不是已实现内容。
+- `13-平衡与结局修整-v1.md`（第十轮：三命上限、失败终章、缴获三选一、难度校准）与 `14-制作名单与作业署名-v1.md`（第十一轮：`COURSE`/`TEAM`、顶栏「制作与分工」、四处署名、窄屏军账定位修法）是最近两轮的实现记录。`13` §八 里的 C11 数值方案**尚未写进 `BALANCE`，等用户拍板**。
 
 ---
 
@@ -78,16 +79,17 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 | `game.js:35` | `BALANCE` | **所有可调数值，只在这一处** |
 | `game.js:75` | `Store` | 状态 + localStorage 读写（`load/save/snapshot/restore`） |
 | `game.js:121` | `Router` | 弹窗栈。**全站不用下拉菜单**，一律 链接 + 弹窗 |
-| `game.js:195` | `Hud` | 右上角四条资源 |
-| `game.js:252` | `MapView` | SVG 大地图（viewBox 2000×4600）+ 拖拽/滚轮/双指缩放 + 视野遮罩 + **下一站判定**（`frontNodes / nextNode / goNext`） |
-| `game.js:705` | `Game` | 主流程：`march`（行军 tick）→ `compute`（结算）→ `applyChoice` → `commit` → `finishChoice` → `afterResolve`；大关卡首破的「三样只能带一样」在 `gateSpoils`（`game.js:1257`）；行进事件文案在 `rollMoveEvent / pickVariant`（`game.js:1040`、`game.js:1066`） |
-| `game.js:1412` | `Sin` | 「多行不义必自毙」：违纪计数与收账 |
-| `game.js:1477` | `Flow` | 部队打散 → 下一程；违纪自毙 → 回到走错前那一步；第三次触发时转入失败终章 |
-| `game.js:1544` | `Pages` | 玩家须知 / 规则手册 / 木牌 / 名单墙 / 史料 / 卡与道具 / 开场 |
-| `game.js:1762` | `Ending` | `run` 走到吴起镇「念名字」（含 B 空格 / C 文物两段条件文本）；`fall` 是失败终章「没有走到吴起镇」（`game.js:1804`） |
-| `game.js:1840` | `Game.debug` | 调试桥：把内部对象挂到 `window.Game`，供跑测台用；`Game.debug.event('mv_mule', 1)` 直接弹出某条行进事件的某个写法 |
+| `game.js:196` | `Hud` | 右上角四条资源 + 底部两个托盘；`Hud.fit()`（`game.js:241`）现算窄屏军账底边距 |
+| `game.js:260` | `MapView` | SVG 大地图（viewBox 2000×4600）+ 拖拽/滚轮/双指缩放 + 视野遮罩 + **下一站判定**（`frontNodes / nextNode / goNext`） |
+| `game.js:713` | `Game` | 主流程：`march`（行军 tick）→ `compute`（结算）→ `applyChoice` → `commit` → `finishChoice` → `afterResolve`；大关卡首破的「三样只能带一样」在 `gateSpoils`（`game.js:1271`）；行进事件文案在 `rollMoveEvent / pickVariant`（`game.js:1054`、`game.js:1087`） |
+| `game.js:1426` | `Sin` | 「多行不义必自毙」：违纪计数与收账 |
+| `game.js:1491` | `Flow` | 部队打散 → 下一程；违纪自毙 → 回到走错前那一步；第三次触发时转入失败终章 |
+| `game.js:1558` | `signLine()` | 作业署名行（开场 CG 与两个终章共用） |
+| `game.js:1566` | `Pages` | 玩家须知 / 规则手册 / **制作与分工 `credits()`（`game.js:1640`）** / 木牌 / 名单墙 / 史料 / 卡与道具 / 开场 |
+| `game.js:1830` | `Ending` | `run` 走到吴起镇「念名字」（含 B 空格 / C 文物两段条件文本）；`fall` 是失败终章「没有走到吴起镇」（`game.js:1872`） |
+| `game.js:1908` | `Game.debug` | 调试桥：把内部对象挂到 `window.Game`，供跑测台用；`Game.debug.event('mv_mule', 1)` 直接弹出某条行进事件的某个写法 |
 
-`data.js` 全是数组/字面量：`NODES`（49 格）、`EDGES`（53 边）、`MOVE_EVENTS`（10 个行进突发事件）、`HISTORY`（41 条史料，带 A/R/? 可信度分级）、`CARDS`（20 张手法卡）、`ITEMS`（7 道具）、`COMRADES`、`REGIONS/PROVINCES/RIVERS/RANGES`（底图几何）。
+`data.js` 全是数组/字面量：`NODES`（49 格）、`EDGES`（53 边）、`MOVE_EVENTS`（10 个行进突发事件）、`HISTORY`（41 条史料，带 A/R/? 可信度分级）、`CARDS`（20 张手法卡）、`ITEMS`（7 道具）、`COMRADES`、`REGIONS/PROVINCES/RIVERS/RANGES`（底图几何）、`ENEMIES`（追兵路线）、**`COURSE` / `TEAM`（`data.js:809`、`data.js:818`）—— 作业信息与制作名单的唯一来源，页脚、顶栏说明页、开场与两个终章都读它**。
 
 **玩法一条线**：大地图上一格一格往北走 → 每格固定 −1 天粮 −1 天时窗 → 点前方格行军 → 到格触发抉择（选项按下后**先在每个选项旁原地亮账停几秒**再跳转）→ 大关卡有 CG 分镜 → 木牌记名字 → 走完吴起镇念名字。
 
@@ -108,7 +110,8 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 9. **「玩家须知」只在第一次进游戏时弹**（看 `Store.s.flags.sawNotes`），之后靠地图左下角的朱红「须知」章重开。别改成每次都弹，那会变成拦路。
 10. **抉择弹窗是 `closable:false + blocking:true`**，玩家点不关它；`Router.closeAll()` 里那句"只有真按过选项才结清"的守卫是防崩的，别删。
 11. **`MOVE_EVENTS` 选项上的 `anch:[...]` 不是冗余字段，别删。** 它是"选项里提到的每一个实体，必须在**这一次屏幕上的正文**里出现过"这条口径的可执行版本（用户反馈「半里路的垫木」那条事件读起来没头没尾之后加的）。`测试/data校验.js` 会拿它去查每一条正文和每一个不带自己 options 的变体；删掉 anch = 关掉这道闸。变体可以自带 `options`（不带走事件级那几条，`pickVariant` 就是这个合并口径），**自带 options 的变体必须自己把锚点交代全**。改完跑 `node 测试/data校验.js 游戏/data.js --对账` 能打出「事件 × 变体 × 选项 × 锚点」对账清单。
-12. 改完全量自检：`node --check 游戏/game.js && node 测试/发布自检.js`，并在浏览器 Console 确认无报错。
+12. **`TEAM` 里组员的 `duty` 是空的，那是"还没确认"，不是漏写。** 这是要署名的作业材料（队长丁晨逸，组员贺智杰、冯天秦、朱培森、吴柏燃），分工一句话必须由本人自己给，**工具不得代拟**。名单、课程、选题口径同理：只改 `data.js` 的 `COURSE` / `TEAM`，不要在 `game.js` 或 `index.html` 里另抄一份。
+13. 改完全量自检：`node --check 游戏/game.js && node 测试/发布自检.js`，并在浏览器 Console 确认无报错。
 
 ---
 
