@@ -1,0 +1,53 @@
+Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
+
+Copyright (c) 2026 《长征：万水千山》项目组 —— 丁晨逸（组长）、贺智杰、冯天秦、朱培森、吴柏燃
+SPDX-License-Identifier: CC-BY-NC-SA-4.0
+
+本作品采用知识共享署名-非商业性使用-相同方式共享 4.0 国际许可协议授权。
+要查看本许可协议的复制件，请访问
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+或写信至 Creative Commons, PO Box 1866, Mountain View, CA 94042, USA。
+
+This Work is licensed under the Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International Public License.
+To view a copy of this license, visit
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+or send a letter to Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
+The full legal code of the license is published at the URL above and is incorporated
+into this notice by reference.
+
+
+一、授权范围（What this license covers）
+----------------------------------------
+本协议适用于本仓库内的全部内容，包括：
+
+- 游戏代码与样式：`游戏/` 下的 `index.html`、`style.css`、`data.js`、`game.js`、`favicon.svg`；
+  以及 `测试/` 下的跑测台、数据校验、发布自检脚本。
+- 本仓库自行创作的文字：剧情文案、节点正文与选项、事件变体、美术位的图样与路线示意图、
+  README 与 00~15 号设计与迭代文档中的作者论述部分。
+- 本仓库自行整理的成果：史料分级标注（A／R／?）与出处清单、数值曲线与跑测记录。
+
+二、不属于本协议的内容（What is NOT covered）
+--------------------------------------------
+- 文中引用的史料原文（回忆录、日记、报刊报道、馆藏说明等）仍归其原作者或原机构所有，
+  本协议不主张也不扩展其权利。请自行核对原始来源的著作权状态后再使用。
+- 《七律·长征》等诗词、以及标注为「本游戏警示页引用」的条文，按公开史料引用处理，
+  二次发布时请连同出处一并保留。
+- 中国工农红军军旗样式、地名与历史事实本身不受著作权保护；仓库内的具体图样为项目组自绘，
+  按本协议授权。
+
+三、 reuse 时必须做到的三件事（If you reuse it）
+----------------------------------------------
+1. 署名：注明作品名《长征：万水千山》、本仓库地址与上述许可；组员的真名是**作业署名**，
+   请勿删改或冒充为本人创作。
+2. 非商业：不得用于任何商业用途（含付费课程、含广告的转载站、商业产品内嵌）。
+   课堂展示、社团活动、公益教学、毕设参考、个人学习与二创均在允许范围内。
+3. 相同方式共享：改编后的作品必须继续以 CC BY-NC-SA 4.0 发布，并说明改动之处
+   （改过玩法数值、删过节点、换过文案，都算改编）。
+
+四、免责（Disclaimer）
+--------------------
+本作品是杭州电子科技大学「中国近现代史纲要」实践教学作业，由学生业余制作，
+按「现状」提供，不构成史学结论或权威叙述。仓库内的文档记录了迭代过程与被否掉的旧方案，
+新旧并存是刻意的；引用其史料口径时请回到标注的原始来源核对。
+THE WORK IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
