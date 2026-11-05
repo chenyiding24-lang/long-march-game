@@ -58,7 +58,12 @@ if (!bad.some(b => /绝对路径/.test(b))) pass('无本机绝对路径（拷到
 /* ---------- 4. 入口与资源引用对得上 ---------- */
 const refs = [...html.matchAll(/(?:src|href)\s*=\s*["']([^"'#]+)["']/g)].map(m => m[1])
   .filter(u => !/^data:/.test(u));
-refs.forEach(u => fs.existsSync(path.join(SITE, u)) ? null : fail('index.html 引用了不存在的文件：' + u));
+/* 引用可以带 ?v=N 版本号（托管方边缘按 URL 缓存静态文件，发布后要换号才能把新 css/js 推到访客端）：
+   查存在性时先把查询串剥掉，报的仍是原文，这样带号与不带号两种写法都验得过。 */
+refs.forEach(u => {
+  const file = u.split('?')[0];
+  fs.existsSync(path.join(SITE, file)) ? null : fail('index.html 引用了不存在的文件：' + u);
+});
 if (refs.length && !bad.some(b => /引用了不存在/.test(b))) pass('index.html 的 ' + refs.length + ' 个本地引用全部命中：' + refs.join('、'));
 if (/charset="utf-8"/i.test(html)) pass('charset=utf-8 已声明（中文剧情不乱码）'); else fail('index.html 缺 charset=utf-8');
 if (/name="viewport"/.test(html)) pass('有 viewport（手机端能自适应）'); else fail('index.html 缺 viewport，窄屏会挤坏');

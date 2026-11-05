@@ -599,10 +599,10 @@ const MapView = {
     let sx = 0, sy = 0, ox = 0, oy = 0, pid = -1;
     let pinch0 = 0, pinchS = 1, pinchMid = null;
     const two = () => { const v = [...pts.values()]; return [v[0], v[1]]; };
-    /* 拖拽可以从任意处起手（包括节点上）：位移过阈值才真正进入拖动，
-       否则就是一次点击 —— 这样按下节点不会被误判成拖动，拖完也不会吃掉下一次点击。 */
+    /* 拖拽可以从地图任意处起手（包括节点上）：位移过阈值才真正进入拖动，按下节点不会被误判成拖动。
+       控件上的手指不算拖拽起手 —— 否则抖动一过阈值就 setPointerCapture，这次点击会被改派给 #viewport，手机上点不动。 */
     vp.addEventListener('pointerdown', (e) => {
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if ((e.pointerType === 'mouse' && e.button !== 0) || (e.target.closest && e.target.closest('.map-tools, #next-arrow, .bottom-trays'))) return;
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (pts.size === 2) {
         /* 第二指落下：转成捏合，单指拖动立刻让位 */
