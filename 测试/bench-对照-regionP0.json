@@ -1,0 +1,28 @@
+{
+  "at": "2026-11-05T17:21:22.010Z",
+  "games": 125,
+  "results": {
+    "chaos": {
+      "games": 125,
+      "wins": 64,
+      "rate": 0.512,
+      "expectedLives": 1.95,
+      "medianLives": 1,
+      "failReasons": {
+        "违纪终章": 61,
+        "打散终章": 0,
+        "卡住": 0,
+        "走不动": 0
+      },
+      "endMen": 49.6,
+      "sinPeak": 4.1,
+      "regionP": 0,
+      "init": {
+        "men": 100,
+        "food": 11,
+        "window": 6,
+        "trust": 40
+      }
+    }
+  }
+}

@@ -17,20 +17,24 @@ const fail = m => bad.push(m);
 
 /* ---------- 1. 站点清单 ---------- */
 const MUST = ['index.html', 'style.css', 'data.js', 'game.js', 'favicon.svg'];
-const EXTRA_OK = new Set([...MUST]);
+/* route3d.html = 体素路线长卷（独立单文件、零外链），顶栏「3D 路线长卷」直接链过去
+   game3d.js = 3D 版事件/关卡引擎，route3d.html 用它跑玩法；与 2D game.js 是两套结算，
+               发布时两个都要发，但改玩法时记得两边都改。 */
+const EXTRA_OK = new Set([...MUST, 'route3d.html', 'game3d.js']);
 if (!fs.existsSync(SITE)) fail('找不到站点根目录：' + SITE);
 else {
   const files = fs.readdirSync(SITE).filter(f => fs.statSync(path.join(SITE, f)).isFile());
   MUST.forEach(f => fs.existsSync(path.join(SITE, f)) ? pass(f + ' 存在') : fail('缺少必发文件 游戏/' + f));
   const extra = files.filter(f => !EXTRA_OK.has(f));
   if (extra.length) fail('游戏/ 里出现清单外的文件（发布前请确认是否该发）：' + extra.join('、'));
-  else pass('游戏/ 下正好 5 个文件，无多余产物');
+  else pass('游戏/ 下 ' + files.length + ' 个文件，全部在发布清单内');
 }
 
 const read = f => path.join(SITE, f);
 const src = name => { try { return fs.readFileSync(read(name), 'utf8'); } catch (e) { return ''; } };
 const html = src('index.html'), css = src('style.css'), data = src('data.js'), js = src('game.js');
-const ALL = { 'index.html': html, 'style.css': css, 'data.js': data, 'game.js': js };
+const js3d = src('game3d.js'), r3d = src('route3d.html');
+const ALL = { 'index.html': html, 'style.css': css, 'data.js': data, 'game.js': js, 'game3d.js': js3d, 'route3d.html': r3d };
 
 /* ---------- 2. 零外链：不许有 CDN / 远程字体 / 网络请求 ---------- */
 /* www.w3.org/2000/svg 是 SVG 命名空间声明，不是请求，白名单 */
@@ -83,9 +87,37 @@ try {
 } catch (e) { fail('无法运行 data校验.js：' + e.message); }
 
 /* ---------- 7. 语法 ---------- */
-[['game.js', js], ['data.js', data]].forEach(([name, t]) => {
+[['game.js', js], ['game3d.js', js3d], ['data.js', data]].forEach(([name, t]) => {
   try { new Function(t); pass(name + ' 语法通过'); } catch (e) { fail(name + ' 语法错误：' + e.message); }
 });
+
+/* ---------- 8. 比赛版：缓存版本号、CG 分镜表、图位体积 ---------- */
+/* 托管方边缘按 URL 缓存静态文件，四个引用的版本号必须一起 bump，
+   否则改了 data.js 却忘了 game.js，访客看到的会是新旧混搭。 */
+const vers = [...html.matchAll(/\?v=(\d+)/g)].map(m => m[1]);
+if (vers.length >= 4 && vers.every(v => v === vers[0])) pass('四个静态引用版本号一致：?v=' + vers[0]);
+else fail('静态引用版本号不一致（边缘缓存会让访客看到旧稿）：' + (vers.join('/') || '无版本号'));
+
+/* 所有被引用的 cg-NN 都必须在 CG_ART 表里有运镜与天气，否则放映机不知道怎么动 */
+const artTable = (data.match(/const CG_ART = ([\s\S]*?);/) || [])[1] || '';
+const tableKeys = [...artTable.matchAll(/['"](cg-\d{2})['"]\s*:/g)].map(m => m[1]);
+const artIds = [...new Set([...(js + data).matchAll(/['"](cg-\d{2})['"]/g)].map(m => m[1]))].sort();
+const missingMeta = artIds.filter(id => tableKeys.indexOf(id) < 0);
+if (missingMeta.length) fail('CG_ART 表缺这些分镜的运镜/天气：' + missingMeta.join('、'));
+else pass('CG_ART 表覆盖全部 ' + artIds.length + ' 个被引用的分镜编号');
+
+/* 图由人生成，缺图不算错误：Router 的 no-art 降级会兜住，试玩不卡 */
+const artDir = path.join(SITE, 'art');
+if (!fs.existsSync(artDir)) pass('art/ 尚未建；缺图由 no-art 降级兜住');
+else {
+  const imgs = fs.readdirSync(artDir).filter(f => /\.webp$/i.test(f));
+  const bytes = imgs.reduce((a, f) => a + fs.statSync(path.join(artDir, f)).size, 0);
+  if (bytes > 3 * 1024 * 1024) fail('CG 图总量超 3MB 预算：' + (bytes / 1024 / 1024).toFixed(2) + ' MB');
+  else pass('CG 图 ' + imgs.length + '/' + artIds.length + ' 张，共 ' + (bytes / 1024).toFixed(0) +
+    ' KB（≤3MB）；缺图时 no-art 降级生效');
+  const odd = imgs.filter(f => !/^cg-\d{2}\.webp$/.test(f));
+  if (odd.length) fail('art/ 里有不合命名的图：' + odd.join('、'));
+}
 
 /* ---------- 报告 ---------- */
 const size = f => (fs.existsSync(read(f)) ? (fs.statSync(read(f)).size / 1024).toFixed(1) + ' KB' : '—');
@@ -93,7 +125,7 @@ console.log('\n《长征：万水千山》发布自检\n站点根目录：游戏
 console.log('单站总体积：' + MUST.map(size).join(' + ') + '\n');
 ok.forEach(m => console.log('  [OK]   ' + m));
 if (bad.length) { console.log('\n=== 必须处理 ===\n' + bad.map(b => '  [FAIL] ' + b).join('\n')); }
-else console.log('\n结论：可直接作为静态站发布 —— 把 游戏/ 里的 ' + MUST.length + ' 个文件当网站根目录，' +
+else console.log('\n结论：可直接作为静态站发布 —— 把 游戏/ 里的 ' + EXTRA_OK.size + ' 个文件当网站根目录，' +
   'index.html 即首页；不需要 npm install、不需要构建、不需要后端。');
 console.log('\n发布后请人工确认（脚本管不了的两件事）：');
 console.log('  1) 手机上竖屏 / 横屏各打一格的观感（样式做了 760px / 430px / hover:none 三档）；');

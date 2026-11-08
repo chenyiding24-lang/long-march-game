@@ -1,0 +1,94 @@
+{
+  "at": "2026-11-08T03:49:49.947Z",
+  "games": 125,
+  "results": {
+    "perfect": {
+      "games": 125,
+      "wins": 125,
+      "rate": 1,
+      "expectedLives": 1,
+      "medianLives": 1,
+      "failReasons": {
+        "违纪终章": 0,
+        "打散终章": 0,
+        "卡住": 0,
+        "走不动": 0
+      },
+      "endMen": 76.4,
+      "sinPeak": 0,
+      "regionP": 0.15,
+      "init": {
+        "men": 100,
+        "food": 11,
+        "window": 6,
+        "trust": 40
+      }
+    },
+    "veteran": {
+      "games": 125,
+      "wins": 125,
+      "rate": 1,
+      "expectedLives": 1,
+      "medianLives": 1,
+      "failReasons": {
+        "违纪终章": 0,
+        "打散终章": 0,
+        "卡住": 0,
+        "走不动": 0
+      },
+      "endMen": 70.5,
+      "sinPeak": 0,
+      "regionP": 0.15,
+      "init": {
+        "men": 100,
+        "food": 11,
+        "window": 6,
+        "trust": 40
+      }
+    },
+    "novice": {
+      "games": 125,
+      "wins": 125,
+      "rate": 1,
+      "expectedLives": 1,
+      "medianLives": 1,
+      "failReasons": {
+        "违纪终章": 0,
+        "打散终章": 0,
+        "卡住": 0,
+        "走不动": 0
+      },
+      "endMen": 44.1,
+      "sinPeak": 0,
+      "regionP": 0.15,
+      "init": {
+        "men": 100,
+        "food": 11,
+        "window": 6,
+        "trust": 40
+      }
+    },
+    "chaos": {
+      "games": 125,
+      "wins": 67,
+      "rate": 0.536,
+      "expectedLives": 1.87,
+      "medianLives": 1,
+      "failReasons": {
+        "违纪终章": 58,
+        "打散终章": 0,
+        "卡住": 0,
+        "走不动": 0
+      },
+      "endMen": 53,
+      "sinPeak": 3.8,
+      "regionP": 0.15,
+      "init": {
+        "men": 100,
+        "food": 11,
+        "window": 6,
+        "trust": 40
+      }
+    }
+  }
+}
