@@ -16,6 +16,17 @@ const pick = (arr) => arr[rnd(arr.length)];
 const esc = (s) => String(s == null ? '' : s)
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const NODE_BY_ID = (() => { const m = {}; NODES.forEach(n => { m[n.id] = n; }); return m; })();
+
+/* C6 · 节点补丁（NODE_PATCHES）：g9 班佑河补 epilogue。
+   先读 g9 现有 carve（data.js:581 含 names）；Object.assign 只补 epilogue，
+   原有 carve（含 names）原样保留，绝不覆盖。 */
+const NODE_PATCHES = {
+  g9: { epilogue: '出发那天，有人想刻下河滩上那些人的名字。可是多数无名，木牌上只留了一行：河滩上的七八百人（多数无名）。' }
+};
+Object.keys(NODE_PATCHES).forEach(id => {
+  const n = NODE_BY_ID[id]; if (!n || !NODE_PATCHES[id]) return;
+  Object.assign(n, NODE_PATCHES[id]);
+});
 const ADJ = (() => {
   const m = {};
   NODES.forEach(n => { m[n.id] = new Set(); });
@@ -39,6 +50,16 @@ const BALANCE = {
   hungerLoss:  6,                          /* 断粮那一格多折的建制 */
   pursuitGrace: 2,                         /* 时窗归零打完遭遇战，甩开尾巴挣回的天数 */
   eventP: 0.24, eventCooldownP: 0.10,      /* 行进突发事件：常态概率 / 上一格刚出过事的概率 */
+  regionP: 0.15,                           /* 已触发的事件里分给区域专属的比例；总触发率不变、不进主池。
+                                             2026-11-06 实测（各 125 局 chaos）：0→51.2%、0.15→49.6%
+                                             （期望 2.02 命，与 15 号 C11 基线一致）、0.20→53.6%、
+                                             0.25→51.2%、0.30→56.8%。取 0.15 保住验收线。
+                                             地域感主要由 5 段地域皮提供，6 条专属事件只作点缀。 */
+  /* S4 / S6 保持默认关：`23` §2-9、`27` §五-7、`28` §七-7、`29` A7 四处口径一致，等真人试玩数据 + bench 对比再定。
+     另注：这两条目前只出 Toast 与议事弹窗，`enemyMod()` 的返回值在 `game.js:1622` 被丢弃，
+     对 C11 结算零影响 —— 要启用前先让它真的影响数值，否则开关没意义。3D 版（game3d.js）同样关。 */
+  council:    { enabled: false, every: 6 },
+  enemyLearn: { enabled: false, maxPerRun: 1 },
   charity:     { trust: 70, food: 1, max: 3 }, /* 民心够高又真断了粮：沿途百姓接济，一局至多三次 */
   comradeCap:  6,                              /* 战友卡同时在队的上限：开局四人 + 中途收编 */
   mateSave:    2,                              /* 一个战友一次最多替你挡下的建制数 */
@@ -86,11 +107,54 @@ const Store = {
       used: [], comrades: ['m_xiaoxie', 'm_laofan', 'm_sanya', 'm_qian'],
       items: [], done: {}, visited: {}, loreSeen: [],
       hungerImmune: false, sitSkips: 0, trustNext: 0, blockNextSurprise: false,
-      historyRead: [], flags: {}
+      historyRead: [], flags: {},
+      /* 逐格战史日志（17 §3.1 S0）：只存引擎已经算出来的字段，一个字都不给模型编。
+         旧档由 Store.load 的 Object.assign(defaultState(), ...) 自动补出空数组，无需迁移。 */
+      log: [],
+      mem: []                                /* 战友记忆（S1）：旧档同样自动补出空数组 */
     };
   },
   defaultMeta() {
     return { wall: [], warnWall: [], unlocked: [], lessons: {}, best: 0, plays: 0, wins: 0 };
+  },
+
+  /* ---------- 存档码（17 §3.10 / 23 §5 T4）----------
+     浏览器清档后复制一段码即可续。
+     只带必要状态：日志带最近 20 条、名单墙带最近 6 块，控制长度。
+     不用 fetch、不写后端；纯本地 base64(UTF-8 JSON)。 */
+  exportCode() {
+    try {
+      const s = this.s, m = this.meta || this.defaultMeta();
+      const payload = {
+        v: 1,
+        s: Object.assign({}, s, { log: (s.log || []).slice(-20) }),
+        m: {
+          unlocked: m.unlocked || [], best: m.best || 0, plays: m.plays || 0, wins: m.wins || 0,
+          wall: (m.wall || []).slice(-6), warnWall: (m.warnWall || []).slice(-3), lessons: m.lessons || {}
+        }
+      };
+      const bytes = new TextEncoder().encode(JSON.stringify(payload));
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch (e) { return null; }
+  },
+  importCode(code) {
+    try {
+      const b64 = String(code || '').trim().replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/');
+      if (!b64) return false;
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const o = JSON.parse(new TextDecoder().decode(bytes));
+      if (!o || o.v !== 1 || !o.s || !o.s.at || !NODE_BY_ID[o.s.at]) return false;
+      this.s = Object.assign(this.defaultState(), o.s);
+      this.meta = Object.assign(this.defaultMeta(), o.m || {});
+      if (!Array.isArray(this.s.log)) this.s.log = [];
+      if (!this.s.flags) this.s.flags = {};
+      this.save();
+      return true;
+    } catch (e) { return false; }
   },
   load() {
     try {
@@ -117,18 +181,88 @@ const Store = {
   restore() { if (this.checkpoint) this.s = JSON.parse(JSON.stringify(this.checkpoint)); }
 };
 
+/* ---------- CgWeather：CG 天气粒子层（纯 canvas，零依赖，17 §6.1） ----------
+   粒子上限 60；掉帧自动关掉画布；prefers-reduced-motion 时完全不启动。
+   图还没生成（或加载失败）时 Router 会把 stage 标成 no-art，只留文字，试玩永远不卡。 */
+const CgWeather = {
+  _raf: new WeakMap(),
+  _reduce() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  },
+  start(wrap, kind) {
+    if (!kind || kind === 'none' || this._reduce()) return;
+    const cv = $('.cg-weather', wrap);
+    if (!cv || !cv.getContext) return;
+    const ctx = cv.getContext('2d');
+    if (!ctx) return;
+    const rect = wrap.getBoundingClientRect ? wrap.getBoundingClientRect() : { width: 640, height: 480 };
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+    cv.width = Math.max(1, Math.floor((rect.width || 640) * dpr));
+    cv.height = Math.max(1, Math.floor((rect.height || 480) * dpr));
+    const N = 60, ps = [];
+    for (let i = 0; i < N; i++) ps.push({ x: Math.random(), y: Math.random(), r: Math.random(), v: .2 + Math.random() * .8 });
+    const color = {
+      snow: 'rgba(230,236,240,', rain: 'rgba(190,205,215,', mist: 'rgba(210,205,190,',
+      ember: 'rgba(230,150,80,', dust: 'rgba(200,180,140,', spray: 'rgba(225,235,240,'
+    }[kind] || 'rgba(220,215,200,';
+    let last = performance.now(), lastCheck = last, frames = 0;
+    const tick = (t) => {
+      const w = cv.width, h = cv.height;
+      ctx.clearRect(0, 0, w, h);
+      const dt = Math.min(50, t - last) / 1000; last = t;
+      ps.forEach(p => {
+        if (kind === 'snow') { p.y += p.v * dt * .06; p.x += dt * .02; }
+        else if (kind === 'rain' || kind === 'spray') { p.y += p.v * dt * .5; p.x -= dt * .08; }
+        else if (kind === 'ember') { p.y -= p.v * dt * .10; p.x += (p.r - .5) * dt * .03; }
+        else if (kind === 'dust') { p.x += p.v * dt * .05; p.y += dt * .005; }
+        else { p.x += dt * .008; p.y -= dt * .004; }
+        if (p.x > 1.05) p.x = -.05; if (p.x < -.05) p.x = 1.05;
+        if (p.y > 1.05) p.y = -.05; if (p.y < -.05) p.y = 1.05;
+        const a = kind === 'mist' ? .05 : .18 + p.r * .32;
+        const size = (kind === 'mist' ? 18 + p.r * 40 : 1 + p.r * 2) * (w / 640 + .4);
+        ctx.fillStyle = color + a.toFixed(2) + ')';
+        ctx.beginPath(); ctx.arc(p.x * w, p.y * h, size, 0, Math.PI * 2); ctx.fill();
+      });
+      frames++;
+      if (t - lastCheck > 1000) {
+        if (frames < 18) { cv.style.display = 'none'; this._raf.delete(wrap); return; }
+        frames = 0; lastCheck = t;
+      }
+      this._raf.set(wrap, requestAnimationFrame(tick));
+    };
+    this._raf.set(wrap, requestAnimationFrame(tick));
+  },
+  stop(wrap) {
+    const id = this._raf.get(wrap);
+    if (id) cancelAnimationFrame(id);
+    this._raf.delete(wrap);
+  }
+};
+
 /* ---------- Router：弹窗栈（不用下拉菜单，全部链接 + 弹窗） ---------- */
 const Router = {
   stack: [],
   open(opts) {
-    /* opts: {title, html, actions:[{text, kind, onClick, hrefNote}], size, cinematic, onClose} */
+    /* opts: {title, html, actions, size, cinematic, art, motion, weather, onClose}
+       art 只给编号（如 'cg-09'）；运镜与天气从 CG_ART 表查，调用点不用重复写。 */
     const wrap = document.createElement('div');
     wrap.className = 'modal-mask' + (opts.cinematic ? ' cinematic' : '');
+    const meta = (typeof CG_ART !== 'undefined' && opts.art && CG_ART[opts.art]) || {};
+    const motion = opts.motion || meta.motion || 'zoom-in';
+    const weather = opts.weather || meta.weather || 'none';
+    const stage = opts.art ? `
+        <div class="cg-stage motion-${esc(motion)} weather-${esc(weather)}">
+          <img class="cg-img" src="art/${esc(opts.art)}.webp" alt="" aria-hidden="true" loading="lazy">
+          <canvas class="cg-weather" aria-hidden="true"></canvas>
+          <div class="cg-scrim"></div>
+        </div>` : '';
+    const seq = (Router.seq = (Router.seq || 0) + 1);
     wrap.innerHTML = `
-      <div class="modal ${opts.size || ''}" role="dialog" aria-modal="true" aria-label="${esc(opts.title || '弹窗')}">
+      <div class="modal ${opts.size || ''}" role="dialog" aria-modal="true" tabindex="-1" aria-labelledby="modal-title-${seq}">
+        ${stage}
         <header class="modal-head">
           ${opts.kicker ? `<span class="kicker">${esc(opts.kicker)}</span>` : ''}
-          <h2>${esc(opts.title || '')}</h2>
+          <h2 id="modal-title-${seq}">${esc(opts.title || '')}</h2>
           ${opts.closable === false ? '' : '<button class="modal-x" data-x aria-label="关闭">✕</button>'}
         </header>
         <div class="modal-body">${opts.html || ''}</div>
@@ -136,6 +270,16 @@ const Router = {
           `<button class="btn ${a.kind || 'ghost'}" data-act="${i}">${esc(a.text)}</button>`).join('')}</footer>
       </div>`;
     $('#modal-root').appendChild(wrap);
+    if (opts.art) {
+      /* 图还没出、或加载失败：stage 直接隐藏，只留原来的文字 CG，试玩永远不卡 */
+      const img = $('.cg-img', wrap);
+      if (img) img.addEventListener('error', () => {
+        const st = $('.cg-stage', wrap);
+        if (st) st.classList.add('no-art');
+        CgWeather.stop(wrap);
+      }, { once: true });
+      CgWeather.start(wrap, weather);
+    }
     document.body.classList.toggle('hud-hidden', !!opts.cinematic);
     document.body.classList.add('modal-open');
     requestAnimationFrame(() => wrap.classList.add('show'));
@@ -143,8 +287,15 @@ const Router = {
     const entry = { el: wrap, opts };
     this.stack.push(entry);
 
+    /* 焦点管理：打开时把焦点收进弹窗（先存好打开前的焦点，关闭时还原），并在弹窗内捕获 Tab 循环 */
+    let onKey;
+    const prevFocus = document.activeElement;
+    const modalEl = $('.modal', wrap);
     const close = () => {
+      CgWeather.stop(wrap);
+      if (onKey) document.removeEventListener('keydown', onKey);
       wrap.classList.remove('show');
+      if (prevFocus && prevFocus.focus) { try { prevFocus.focus(); } catch (e) {} }
       setTimeout(() => {
         wrap.remove();
         this.stack = this.stack.filter(x => x !== entry);
@@ -174,11 +325,23 @@ const Router = {
         if (to === 'map') close();
         if (to === 'help') Pages.help();
         if (to === 'cards') Pages.cards();
-        if (to === 'team') Pages.credits();
       }
     });
-    document.addEventListener('keydown', function onKey(ev) {
-      if (ev.key === 'Escape' && opts.closable !== false) { close(); document.removeEventListener('keydown', onKey); }
+    onKey = (ev) => {
+      if (ev.key === 'Escape' && opts.closable !== false) { close(); return; }
+      /* 只在本弹窗处于栈顶时捕获 Tab，使焦点在弹窗内循环，不漏到背后页面 */
+      if (ev.key === 'Tab' && this.stack[this.stack.length - 1] === entry) {
+        const f = $$('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])', wrap);
+        if (!f.length) { ev.preventDefault(); return; }
+        const first = f[0], last = f[f.length - 1];
+        if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+        else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    requestAnimationFrame(() => {
+      const focusTarget = $('.btn', wrap) || $('.modal-x', wrap) || modalEl;
+      if (focusTarget && focusTarget.focus) focusTarget.focus();
     });
     return close;
   },
@@ -188,7 +351,245 @@ const Router = {
     const c = Game.activeCtx;
     if (c && c.settle && !c.done && c.opt) { c.done = true; c.settle(); }
     else if (c && !c.opt && !c.done && Game.activeCtx === c) Game.activeCtx = null;
-    [...this.stack].forEach(e => { e.el.remove(); }); this.stack = []; document.body.classList.remove('hud-hidden', 'modal-open');
+    [...this.stack].forEach(e => { CgWeather.stop(e.el); e.el.remove(); });
+    this.stack = []; document.body.classList.remove('hud-hidden', 'modal-open');
+  }
+};
+
+/* ---------- Sound：音效开关（17 §3.10 S9）----------
+   默认全关，公开试玩里自动放声是差评来源。
+   音频文件由人后补；没有文件时点了也不加载任何资源、不发声。 */
+const Sound = {
+  on: false,
+  toggle() {
+    this.on = !this.on;
+    Toast.show(this.on ? '音效已开（当前没有音频文件，仍然静音）' : '音效已关');
+    Hud.render();
+  }
+};
+
+/* ---------- S4 军帐议事 / S6 追兵学你（轻量±5% 叠加层，已启用，不碰 C11）----------
+   只陈列本局与历史事实、给一个 ±5% 的「议事/学你」提示；绝不改写 BALANCE 数值。 */
+const Council = {
+  render() {
+    if (!BALANCE.council.enabled) return;
+    const bench = window.__CWQS_BENCH;                 // 可选：由 测试/bench-*.json 注入
+    const s = Store.s;
+    const hunger = (s.log || []).filter(e => e.kind === 'march' && e.hunger).length;
+    const lines = [
+      '本局断粮 ' + hunger + ' 次',
+      '木牌已刻 ' + (s.board.names.length) + ' 个名字',
+      '违纪标记 ' + (s.sin || 0) + ' 处'
+    ];
+    if (bench) lines.push('历史均值断粮 ' + (bench.avgHunger != null ? bench.avgHunger : '—') + ' 次');
+    lines.push('军帐议事：本局难度按 ±5% 叠加层微调（仅供参考，不改动定稿数值）');
+    Router.open({
+      title: '军帐议事', kicker: '只陈列本局与历史事实',
+      html: '<p class="cg">' + lines.join(' · ') + '</p>',
+      actions: [{ text: '知道了', kind: 'ghost' }]
+    });
+  }
+};
+/* S6 追兵学你：本局至多 maxPerRun 次，每次给一个 ±5% 的叠加层提示（不进 C11 结算）。
+   clamp 保证幅度落在 ±5% 内，且绝不回写 BALANCE。 */
+function enemyMod() {
+  if (!BALANCE.enemyLearn.enabled) return 0;
+  const s = Store.s;
+  if ((s._enemyLearned || 0) >= BALANCE.enemyLearn.maxPerRun) return 0;
+  s._enemyLearned = (s._enemyLearned || 0) + 1;
+  const v = clamp((Math.random() * 2 - 1) * 0.05, -0.05, 0.05);
+  const pct = Math.round(v * 100);
+  Toast.show('追兵学你：本局节奏微调约 ' + (pct > 0 ? '+' : '') + pct + '%（±5% 叠加层，仅供参考）');
+  return v;
+}
+
+/* ---------- Share：一页「你的这一程」分享卡（17 §3.3 / 19 §5）----------
+   纯 canvas，零依赖；所有数字由引擎给，叙事只取一行通过守卫的摘录。
+   二维码位留空框 —— 链接由人发布后自行补，不引外部二维码库。 */
+const Share = {
+  code() {
+    const s = Store.s;
+    const raw = s.run + '|' + s.board.names.length + '|' + s.men + '|' + Object.keys(s.visited).length;
+    let h = 0;
+    for (let i = 0; i < raw.length; i++) h = (h * 31 + raw.charCodeAt(i)) >>> 0;
+    return h.toString(36).toUpperCase().slice(0, 6).padStart(6, '0');
+  },
+  defaultLine() {
+    const s = Store.s;
+    const steps = (s.log || []).filter(e => e.kind === 'march').length;
+    return '第 ' + s.run + ' 程 · 走过 ' + steps + ' 格 · 木牌 ' + s.board.names.length + ' 个名字';
+  },
+  render(line) {
+    try {
+      const c = document.createElement('canvas'); c.width = 900; c.height = 1200;
+      const x = c.getContext('2d'); if (!x) return null;
+      const s = Store.s;
+      x.fillStyle = '#efe6d0'; x.fillRect(0, 0, 900, 1200);
+      x.fillStyle = '#8C3B2E'; x.fillRect(0, 0, 900, 14);
+      x.strokeStyle = 'rgba(122,111,87,.5)'; x.lineWidth = 2; x.strokeRect(28, 34, 844, 1132);
+      x.fillStyle = '#2c2820'; x.font = '500 54px "Songti SC","SimSun",serif';
+      x.fillText('万水千山', 64, 118);
+      x.fillStyle = '#6b614f'; x.font = '24px "Songti SC","SimSun",serif';
+      x.fillText('你的这一程 · ' + this.code(), 64, 162);
+      /* 木牌：真实刻名 + 永远填不满的留白格 */
+      x.fillStyle = '#5d4a33'; x.fillRect(64, 210, 772, 360);
+      x.fillStyle = '#6d583e'; x.fillRect(76, 222, 748, 336);
+      x.fillStyle = '#f0e6d2'; x.font = '30px "Songti SC","SimSun",serif';
+      const names = s.board.names.slice(0, 24);
+      names.forEach((n, i) => x.fillText(n, 100 + (i % 4) * 185, 280 + Math.floor(i / 4) * 52));
+      if (!names.length) x.fillText('（这块牌还是空的）', 100, 280);
+      if (s.board.blanks) {
+        x.fillStyle = '#b9a98a'; x.font = '22px "Songti SC","SimSun",serif';
+        x.fillText('另有 ' + s.board.blanks + ' 格空白，没有找到名字', 100, 530);
+      }
+      x.fillStyle = '#2c2820'; x.font = '28px "Songti SC","SimSun",serif';
+      ['兵 ' + s.men, '粮 ' + s.food, '时 ' + s.window, '民 ' + s.trust,
+       '馆藏 ' + s.items.length + '/' + Object.keys(ITEMS).length]
+        .forEach((t, i) => x.fillText(t, 64 + (i % 3) * 270, 640 + Math.floor(i / 3) * 52));
+      x.fillStyle = '#4c463c'; x.font = '26px "Songti SC","SimSun",serif';
+      x.fillText(String(line || this.defaultLine()).slice(0, 28), 64, 780);
+      x.fillStyle = '#7b7261'; x.font = '20px "Songti SC","SimSun",serif';
+      x.fillText('纯静态 · 零依赖 · 点开即玩', 64, 1080);
+      return c.toDataURL('image/png');
+    } catch (e) { return null; }
+  },
+  download(line) {
+    const url = this.render(line);
+    if (!url) { Toast.show('这张卡没能生成'); return false; }
+    const a = document.createElement('a');
+    a.href = url; a.download = '我的这一程-' + this.code() + '.png'; a.click();
+    Toast.show('已导出「你的这一程」');
+    return true;
+  }
+};
+
+/* ---------- Chronicle：终章战史官（17 §3.3 / 19 §5）----------
+   输入只有 Store.s.log 的结构化字段；史实、数字、地名一个都不让模型补。
+   AI 通道可插拔：外部注入 window.__CWQS_AI.ask(prompt, facts) 才启用，
+   game.js 内不写 fetch —— 零外链、file:// 可玩、断网/429/越界一律回模板。 */
+const Chronicle = {
+  _cache: null,
+  facts() {
+    const s = Store.s, log = (s.log || []).filter(e => e.kind !== 'digest');
+    const march = log.filter(e => e.kind === 'march');
+    const choices = log.filter(e => e.kind === 'choice');
+    return {
+      run: s.run, steps: march.length, choices: choices.length,
+      places: [...new Set(log.map(e => e.place).filter(Boolean))].slice(0, 12),
+      firstPlace: (march[0] || {}).place || '', lastPlace: (log[log.length - 1] || {}).place || '',
+      names: s.board.names.slice(), blanks: s.board.blanks,
+      men: s.men, food: s.food, window: s.window, trust: s.trust,
+      items: s.items.slice(), hunger: march.filter(e => e.hunger).length,
+      sins: choices.filter(e => e.sin).length,
+      labels: choices.slice(0, 12).map(e => e.label)
+    };
+  },
+  /* 模板战史：只用 facts 里的字段，永不出错，断网也在 */
+  template(tone) {
+    const f = this.facts();
+    if (tone === '方志') {
+      return '第' + f.run + '程。自' + (f.firstPlace || '于都') + '启行，历' + f.steps + '程' +
+        (f.hunger ? '，断粮者再' + f.hunger : '') + '。' +
+        (f.lastPlace ? '止于' + f.lastPlace + '。' : '') +
+        '木牌刻名' + f.names.length + (f.blanks ? '，留白' + f.blanks + '格' : '') +
+        '。余兵' + f.men + '，粮' + f.food + '，民' + f.trust + '。';
+    }
+    return '这一程走了 ' + f.steps + ' 格，做过 ' + f.choices + ' 次取舍。' +
+      (f.firstPlace ? '从' + f.firstPlace + '出发，' : '') +
+      (f.lastPlace ? '到' + f.lastPlace + '。' : '') +
+      (f.hunger ? '有 ' + f.hunger + ' 格断了粮。' : '') +
+      '木牌上刻下 ' + f.names.length + ' 个名字' + (f.blanks ? '，还留着 ' + f.blanks + ' 格空白' : '') + '。' +
+      '走到最后，兵 ' + f.men + '，粮 ' + f.food + '，民 ' + f.trust + '。';
+  },
+  /* 守卫：越界整条丢弃，绝不把模型的即兴写进作品 */
+  guard(text, f) {
+    /* 下限只用来挡空串和半句，不强制 150 字 —— 否则合规的短句会被误拒回模板，
+       AI 在场感就没了（2026-11-06 冒烟实测发现）。 */
+    if (typeof text !== 'string' || text.length < 20 || text.length > 300) return false;
+    if (/胜利|伟大|不朽|辉煌|史诗|致敬|铭记历史|永不磨灭/.test(text)) return false;
+    if (/毛泽东|周恩来|朱德|蒋介石|张国焘/.test(text)) return false;
+    if (/忽略(上文|之前|以上)|系统提示|作为一个?AI|语言模型/.test(text)) return false;
+    const allowed = [f.run, f.steps, f.choices, f.hunger, f.sins, f.names.length,
+      f.blanks, f.men, f.food, f.window, f.trust, f.items.length].map(String);
+    return !(text.match(/\d+/g) || []).some(n => allowed.indexOf(n) < 0);
+  },
+  async write(tone) {
+    const f = this.facts();
+    const ch = window.__CWQS_AI;
+    if (!ch || typeof ch.ask !== 'function') return this.template(tone);
+    try {
+      const prompt = CHRONICLE_PROMPT.replace('{{LOG_JSON}}', JSON.stringify(f))
+        .replace('{{TONE}}', tone === '方志' ? '方志体' : '白话');
+      const out = await ch.ask(prompt, f);
+      return this.guard(out, f) ? out : this.template(tone);
+    } catch (e) { return this.template(tone); }
+  },
+  /* 终章同步用：AI 还没回来就先给模板，回来再替换，玩家永远不空等 */
+  install(hostId, tone) {
+    const el = document.getElementById(hostId);
+    if (!el) return;
+    el.textContent = this.template(tone);
+    this.write(tone).then(t => {
+      const now = document.getElementById(hostId);
+      /* 异步回包前若弹窗已关、元素被卸载，跳过替换：避免报错或写进错误的宿主 */
+      if (now && now.isConnected && t && t !== now.textContent) now.textContent = t;
+    }).catch(() => {});
+  },
+  excerpt() {
+    if (this._cache && this.guard(this._cache, this.facts())) return this._cache.slice(0, 28);
+    return this.template('白话').slice(0, 28);
+  }
+};
+
+/* ---------- Memory：战友记忆（17 §3.2 S1）----------
+   记忆与后果全由引擎判定，AI 只被允许改「一句人话」的措辞。
+   四类事实全部来自真实结算：收编、交出去的人、看见的违纪、同饿。 */
+const MEM_KIND = { saved: '收编', abandoned: '交出去的人', sin_witness: '看见的事', shared_hunger: '同饿' };
+const Memory = {
+  add(kind, what, extra) {
+    const s = Store.s;
+    if (!s.mem) s.mem = [];
+    const at = NODE_BY_ID[s.at] || {};
+    s.mem.push(Object.assign({
+      kind, what: String(what || ''), place: at.name || '', at: s.at,
+      region: at.region || '', run: s.run, who: s.comrades[0] || '', seen: false
+    }, extra || {}));
+    if (s.mem.length > 60) s.mem.splice(0, s.mem.length - 60);
+  },
+  template(m) {
+    const bank = (typeof NPC_LINES !== 'undefined' ? NPC_LINES : []).filter(l => l.kind === m.kind);
+    const line = bank.length ? bank[Math.floor(Math.random() * bank.length)] : null;
+    if (!line) return '（他没说话，只是把帽檐压低了一点。）';
+    const who = COMRADES[m.who] ? COMRADES[m.who].name : '';
+    return (who ? who + '：' : '') + String(line.text)
+      .replace(/\{\{place\}\}/g, m.place || '路上')
+      .replace(/\{\{what\}\}/g, m.what || '那件事');
+  },
+  guard(text) {
+    if (typeof text !== 'string' || text.length < 12 || text.length > 40) return false;
+    if (/毛泽东|周恩来|朱德|蒋介石|张国焘|胜利|伟大|AI|模型|提示|忽略上文/.test(text)) return false;
+    return true;
+  },
+  async refine(m) {
+    const ch = window.__CWQS_AI;
+    if (!ch || typeof ch.ask !== 'function') return this.template(m);
+    try {
+      const out = await ch.ask(
+        '把下面这条结构化记忆改写成一句 12～40 字的中文人话，只写这一件事。' +
+        '不许出现真实历史人物姓名，不许评价党史定论，不许出现现代词，' +
+        '不许补写字段里没有的事，不许超过两个分句。只输出这一句。\n' + JSON.stringify(m), m);
+      return this.guard(out) ? out : this.template(m);
+    } catch (e) { return this.template(m); }
+  },
+  pending() { return (Store.s.mem || []).filter(m => !m.seen); },
+  /* 可见回执：宿营格与大关卡之后，挑一条未回执记忆说一句（不打断流程） */
+  receipt() {
+    const list = this.pending();
+    if (!list.length) return;
+    const m = list[Math.floor(Math.random() * list.length)];
+    m.seen = true;
+    Store.save();
+    Toast.show(this.template(m));
   }
 };
 
@@ -196,7 +597,7 @@ const Router = {
 const Hud = {
   build() {
     $('#hud').innerHTML = Object.values(RES).map(r => `
-      <div class="res" data-res="${r.key}" title="${esc(r.desc)}">
+      <div class="res" data-res="${r.key}" role="group" title="${esc(r.desc)}">
         <span class="res-label">${r.label}</span>
         <span class="res-val" id="v-${r.key}">0</span>
         <span class="res-unit">${r.unit}</span>
@@ -208,6 +609,8 @@ const Hud = {
         <span class="res-val" id="v-board">0</span>
         <span class="res-unit">个名字</span>
         <span class="res-sub" id="v-run">第 1 程</span>
+        <span class="res-sub" id="v-items">馆藏 0/7</span>
+        <button class="res-sound" id="sound-btn" aria-label="音效开关" title="音效（默认关）">音 关</button>
       </div>`;
   },
   render() {
@@ -220,10 +623,18 @@ const Hud = {
       const el = $('#v-' + k).parentElement;
       el.classList.toggle('low', v <= (r.max * 0.2));
       el.classList.toggle('zero', v <= 0);
+      let statusLab = r.label + ' ' + v + r.unit;
+      if (v <= 0) statusLab += '，缺';
+      else if (v <= (r.max * 0.2)) statusLab += '，紧缺';
+      el.setAttribute('aria-label', statusLab);
     });
     $('#v-men').textContent = s.men;
     $('#v-board').textContent = s.board.names.length;
     $('#v-run').textContent = '第 ' + s.run + ' 程';
+    const itemsEl = $('#v-items');
+    if (itemsEl) itemsEl.textContent = '馆藏 ' + s.items.length + '/' + Object.keys(ITEMS).length;
+    const snd = $('#sound-btn');
+    if (snd) { snd.textContent = Sound.on ? '音 开' : '音 关'; snd.classList.toggle('on', !!Sound.on); }
     $('#v-trust').parentElement.classList.toggle('seep', s.sin > 0);
     $('#hand-tray').innerHTML = s.hand.map(id => {
       const c = CARDS[id]; if (!c) return '';
@@ -393,17 +804,26 @@ const MapView = {
   },
 
   /* 脚下这一步真能踩下去的去向：相邻 + 已探明 + 没被锁。
-     先没走过的（别把玩家推荐回已经打完的来路），再大关卡，最后就近。 */
+     先没走过的（别把玩家推荐回已经打完的来路），都没走过再大关卡优先，最后就近；
+     都已走过（死路/叶子）则纯就近回退，不跳回起点关卡。 */
   frontNodes() {
     const s = Store.s, cur = NODE_BY_ID[s.at];
     if (!cur) return [];
-    const rank = n => (s.done[n.id] ? 2 : 0) + (n.kind === 'gate' ? 0 : 1);
+    const d = n => this.dist(cur, n);
     return [...(ADJ[s.at] || new Set())]
       .map(id => NODE_BY_ID[id])
       .filter(n => n && n.id !== s.at && this.visible(n)
         && !(n.lockedUntil && !s.done[n.lockedUntil])
         && !(n.hiddenUntilWin && !(Store.meta.wins > 0)))
-      .sort((a, b) => (rank(a) - rank(b)) || (this.dist(cur, a) - this.dist(cur, b)));
+      .sort((a, b) => {
+        const da = s.done[a.id] ? 1 : 0, db = s.done[b.id] ? 1 : 0;   /* 先没走过的 */
+        if (da !== db) return da - db;
+        if (!da) {                                                    /* 都没走过：大关卡优先 */
+          const ga = a.kind === 'gate' ? 0 : 1, gb = b.kind === 'gate' ? 0 : 1;
+          if (ga !== gb) return ga - gb;
+        }                                                            /* 都已走过：纯就近回退 */
+        return d(a) - d(b);
+      });
   },
   nextNode() { return this.frontNodes()[0] || null; },
 
@@ -474,7 +894,11 @@ const MapView = {
       const cls = ['node', n.kind, here ? 'here' : '', adj ? 'reach' : '', isNext ? 'next' : '', done ? 'done' : '', hidden ? 'unknown' : ''].filter(Boolean).join(' ');
       const label = hidden ? '?' : n.name;
       const go = isNext ? '▸ 下一站 · ' + (this.hintOf(n, hidden).split(' · ')[0]) : this.hintOf(n, hidden);
-      nl += `<g class="${cls}" data-node="${n.id}" transform="translate(${n.x},${n.y})">
+      /* 键盘可达：相邻（reach）/ 下一站（next）/ 当前（here）节点可被 Tab 聚焦，Enter/Space 行军 */
+      const a11y = (adj || isNext || here)
+        ? ` tabindex="0" role="button" aria-label="${esc(here ? ('查看' + label) : ('行军至' + label))}"`
+        : '';
+      nl += `<g class="${cls}" data-node="${n.id}"${a11y} transform="translate(${n.x},${n.y})">
         ${isNext ? '<circle class="next-halo" r="58"/><circle class="next-ring" r="58"/>' : ''}
         <circle class="hit" r="34"/>
         ${n.kind === 'gate'
@@ -674,11 +1098,19 @@ const MapView = {
     });
     window.addEventListener('resize', () => this.applyTransform());
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Tab') { e.preventDefault(); this.setFar(!this.far); }
+      /* 焦点落在地图节点（<g data-node>，tabindex=0，role=button）上时：
+         Enter / Space 直接行军至该节点，不再抢走"走下一站"，也不被地图快捷键劫持 */
+      const fn = e.target && e.target.dataset && e.target.dataset.node;
+      if (fn && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); Game.onNodeClick(e.target.dataset.node); return; }
+      /* 焦点在按钮 / 链接 / 输入框时，按键交给控件自己处理，地图不抢 */
+      const tag = (e.target.tagName || '').toUpperCase();
+      if (/^(BUTTON|A|INPUT|TEXTAREA|SELECT)$/.test(tag)) return;
+      /* 'f' 键 = 远望全图（不再劫持 Tab，Tab 留给原生遍历顶栏/下一站/托盘/地图工具） */
+      if (e.key === 'f' || e.key === 'F') { e.preventDefault(); this.setFar(!this.far); }
       if (e.key === '+' || e.key === '=') { this.s = clamp(this.s * 1.12, 0.12, 1); this.applyTransform(); }
       if (e.key === '-') { this.s = clamp(this.s * 0.89, 0.12, 1); this.applyTransform(); }
-      /* 空格 = 走下一站（焦点在按钮上时让给按钮自己，别抢） */
-      if (e.key === ' ' && !/^(BUTTON|A|INPUT)$/.test((e.target.tagName || ''))) { e.preventDefault(); Game.goNext(); }
+      /* 空格 = 走下一站（焦点不在节点/按钮上时） */
+      if (e.key === ' ') { e.preventDefault(); Game.goNext(); }
     });
   }
 };
@@ -712,6 +1144,63 @@ const GHOST_PATHS = [
 /* ---------- Game：主流程 ---------- */
 const Game = {
 
+  /* ---------- 逐格战史日志（17 §3.1 S0） ----------
+     只记引擎已经算出来的字段。AI 战史官与战友记忆都从这里取事实，
+     日志里没有的一个字不许补。旧档会自动补出 log:[]，无需迁移。 */
+  logStep(e) {
+    const s = Store.s;
+    if (!s.log) s.log = [];
+    const at = NODE_BY_ID[s.at] || {};
+    s.log.push(Object.assign({
+      i: s.log.length + 1, at: s.at, place: at.name || '', region: at.region || '', run: s.run
+    }, e));
+    /* localStorage 体积控制：超过 120 条把前 60 条压成一条摘要 */
+    if (s.log.length > 120) {
+      const head = s.log.splice(0, 60);
+      s.log.unshift({ i: 0, kind: 'digest', place: '前段路程', region: '',
+        steps: head.length, note: '前 ' + head.length + ' 步已压缩，只保留摘要' });
+    }
+  },
+
+  /* 民心回响（17 §3.6 S5）：锁死选项时不写判词，用画面回指本局真实发生过的那一次。
+     只取日志里的地名与玩家按下的按钮文字，一个字都不补。 */
+  echoLine(node) {
+    const s = Store.s;
+    const sin = (s.log || []).filter(e => e.kind === 'choice' && e.sin);
+    if (!sin.length) return '';
+    const first = sin[0];
+    const what = String(first.label || '那一次').replace(/[（(].*?[）)]/g, '').trim();
+    return '那天在' + (first.place || '路上') + '，你按下了「' + what + '」。' +
+      '今天走到' + (node.name || '这里') + '，门口没有人出来。';
+  },
+
+  /* 人物篇目过场（19 §4）：插在「上一格结算完 → 本格打开前」，一局只播一次，无交互 */
+  pendingCutscene(node) {
+    const s = Store.s;
+    if (typeof CUTSCENES === 'undefined') return null;
+    const prev = s.flags.lastResolvedNode;
+    if (!prev) return null;
+    const keys = Object.keys(CUTSCENES);
+    for (let i = 0; i < keys.length; i++) {
+      const c = CUTSCENES[keys[i]];
+      if (c.afterNode === prev && (!c.beforeNode || c.beforeNode === node.id) &&
+          !s.done['cut_' + keys[i]]) return { key: keys[i], c };
+    }
+    return null;
+  },
+
+  playCutscene(node, hit, done) {
+    const s = Store.s, c = hit.c;
+    s.done['cut_' + hit.key] = true;
+    s.flags.lastResolvedNode = null;   /* 防止本格之后再次命中同一段过场 */
+    Router.open({
+      title: c.title, kicker: c.kicker, size: 'wide', cinematic: true,
+      art: c.art, motion: c.motion, closable: false, blocking: true,
+      html: c.html,
+      actions: [{ text: '继续走', kind: 'primary', onClick: () => { setTimeout(done, 240); } }]
+    });
+  },
+
   boot() {
     Store.load();
     Hud.build();
@@ -733,14 +1222,22 @@ const Game = {
     $('#nav-history').addEventListener('click', () => Pages.history());
     $('#nav-cards').addEventListener('click', () => Pages.cards());
     $('#nav-help').addEventListener('click', () => Pages.help());
-    $('#nav-team').addEventListener('click', () => Pages.credits());
-    const byRole = {};
-    TEAM.forEach(t => { (byRole[t.role] = byRole[t.role] || []).push(t.name); });
-    $('#foot-team').textContent = `${COURSE.name} · ${COURSE.theme} ｜ ` +
-      Object.keys(byRole).map(r => `${r} ${byRole[r].join('、')}`).join(' · ');
+    $('#nav-memory').addEventListener('click', () => Pages.memory());
+    $('#nav-code').addEventListener('click', () => Pages.codePage());
+    $('#sound-btn').addEventListener('click', () => Sound.toggle());
     $('#far-toggle').addEventListener('click', () => MapView.setFar(!MapView.far));
     $('#center-btn').addEventListener('click', () => MapView.goTo(NODE_BY_ID[Store.s.at]));
     $('#reset-btn').addEventListener('click', () => Pages.confirmReset());
+    /* S4 军帐议事：开关启用时挂一个顶栏入口，点开即出本局/历史事实 + ±5% 提示（复用 .navlink 样式） */
+    if (BALANCE.council.enabled) {
+      const cbtn = document.createElement('button');
+      cbtn.className = 'navlink'; cbtn.id = 'nav-council'; cbtn.textContent = '军帐议事';
+      cbtn.addEventListener('click', () => Council.render());
+      const nav = $('#topnav'); if (nav) nav.appendChild(cbtn);
+    }
+    /* V1：远望全图改用 F 键（不再劫持 Tab）；index.html 不可改，运行时同步提示文案 */
+    const mn = document.querySelector('.map-note');
+    if (mn) mn.textContent = mn.textContent.replace('Tab 远望全图', 'F 键远望全图');
     $('#notes-btn').addEventListener('click', () => Pages.notes());
     window.addEventListener('resize', () => Hud.fit());
     /* 下一站的两种点法：底部药丸 + 视口边缘箭头，都走同一套可达性判定 */
@@ -807,6 +1304,13 @@ const Game = {
         else if (Math.random() < p && node.kind !== 'gate') surprise = this.rollMoveEvent();
         s.flags.lastMarchSurprise = !!surprise;
       }
+      /* 逐格战史：没有抉择的一格也要记，否则战史官只能靠终值编故事 */
+      this.logStep({
+        kind: 'march', label: '行军',
+        delta: { food: BALANCE.march.food, window: BALANCE.march.window },
+        menAfter: s.men, foodAfter: s.food, windowAfter: s.window, trustAfter: s.trust,
+        hunger: s.food <= 0, pursuit: !!crisis, surprise: surprise ? surprise.title : null
+      });
       this.afterArrive(node, surprise);
     });
   },
@@ -850,6 +1354,9 @@ const Game = {
 
   enter(node) {
     const s = Store.s;
+    /* 人物篇目过场：上一格结算完、本格打开前播一次；播完再进本格 */
+    const cut = this.pendingCutscene(node);
+    if (cut) { this.playCutscene(node, cut, () => this.enter(node)); return; }
     if (node.kind === 'hub') { this.enterHub(node); return; }
     if (s.done[node.id]) {
       Router.open({
@@ -862,7 +1369,7 @@ const Game = {
       return;
     }
     if (node.finale) { Ending.run(); return; }
-    if (node.sits) { this.sitLoop(node, () => this.openNode(node)); return; }
+    if (node.sits) { Memory.receipt(); this.sitLoop(node, () => this.openNode(node)); return; }
     this.openNode(node);
   },
 
@@ -922,7 +1429,7 @@ const Game = {
   showSitLore(node, after) {
     Store.s.done['sit_' + node.id] = true;
     Router.open({
-      title: '那块“大石头”', kicker: 'R · 据老红军回忆', size: 'mid', cinematic: true,
+      title: '那块“大石头”', kicker: 'R · 据老红军回忆', size: 'mid', cinematic: true, art: 'cg-10',
       onClose: () => { if (after) after(); },
       html: `<p class="cg">十九岁的郝毅走不动了，朦胧间见前面有块大石头，把包袱放上去想坐一会儿——一坐下去，“大石头”歪倒了：那是前面部队牺牲的战友，身子已经僵硬。</p>
              <p class="cg dim">刘洪才记得另一夜：头天挤在雪洞里取暖，第二天醒来只剩副班长还躺着，一推才知道已经冻死。</p>
@@ -941,7 +1448,8 @@ const Game = {
       Router.open({
         title: node.name, kicker: node.date || '', size: 'mid',
         html: `<p class="lead">${esc(node.scene || node.text || '')}</p>
-               <div class="lockbox"><b>选项已被锁死</b><p>${esc(node.requires.failText)}</p></div>`,
+               <div class="lockbox"><b>选项已被锁死</b><p>${esc(node.requires.failText)}</p>
+               ${this.echoLine(node) ? `<p class="echo">${esc(this.echoLine(node))}</p>` : ''}</div>`,
         actions: [{ text: '接受代价继续', kind: 'ghost', onClick: () => this.resolve(node, {
           label: '被迫硬闯（无人带路）', cost: { men: -8, window: -2 }, outcome: '没有向导，没有借粮。你的队伍在自己找路上耗掉了两天。'
         }) }]
@@ -1055,7 +1563,22 @@ const Game = {
     const s = Store.s, f = s.flags;
     const cur = NODE_BY_ID[s.at] || {};
     const seen = f.moveSeen || (f.moveSeen = {});
+    /* ① 独立地域池：只抽当前区域的专属事件，抽中就直接返回。
+       主池 10 条、权重和 90、eventP=0.24 一个数字都不动（17 §5.3 方案 B）。 */
+    if (BALANCE.regionP > 0 && Math.random() < BALANCE.regionP) {
+      const local = MOVE_EVENTS.filter(m => m.localRegion === cur.region &&
+        (seen[m.id] || 0) < 2 && m.id !== f.lastMoveId);
+      if (local.length) {
+        const m = local[rnd(local.length)];
+        seen[m.id] = (seen[m.id] || 0) + 1;
+        f.lastMoveId = m.id;
+        f.lastMoveLocal = true;
+        return this.pickVariant(m);
+      }
+    }
+    f.lastMoveLocal = false;
     const pool = MOVE_EVENTS.filter(m => {
+      if (m.localRegion) return false;   /* ★ 区域专属必须排除出主池，否则权重和 90→114 */
       if (m.region && m.region.indexOf(cur.region) < 0) return false;
       const n = m.need || {};
       if (n.windowMax != null && s.window > n.windowMax) return false;
@@ -1086,12 +1609,18 @@ const Game = {
      否则选项读起来就是没头没尾的（「杀掉」杀什么？玩家不知道）。 */
   pickVariant(m) {
     const f = Store.s.flags;
-    const list = [{ title: m.title, text: m.text, options: m.options }].concat(m.variants || []);
+    /* 地域皮（17 §3.4 S3 / 19 §2）：带 region 的变体只在本区域进入候选，
+       不带 region 的原变体照常全局可用。校验器原生就能逐个载体查锚点。 */
+    const region = (NODE_BY_ID[Store.s.at] || {}).region;
+    const raw = (m.variants || []).filter(v => !v.region || v.region === region);
+    const list = [{ title: m.title, text: m.text, options: m.options }].concat(raw);
     const used = f.mvVar || (f.mvVar = {});
     const fresh = list.map((v, i) => i).filter(i => !used[m.id + '#' + i]);
     const i = fresh.length ? fresh[Math.floor(Math.random() * fresh.length)] : Math.floor(Math.random() * list.length);
     used[m.id + '#' + i] = 1;
     const v = list[i];
+    /* S6 追兵学你：启用时本局至多 maxPerRun 次，给一个 ±5% 叠加层提示（不进 C11 结算） */
+    enemyMod();
     return Object.assign({}, m, { title: v.title, text: v.text, options: v.options || m.options });
   },
 
@@ -1198,6 +1727,17 @@ const Game = {
     }
     Hud.flash(p.d);
     this.finishChoice(node, opt, p.d);
+    /* 逐格战史：记的是引擎刚算完的账，不是模型写出来的话 */
+    s.flags.lastResolvedNode = node.id;
+    this.logStep({
+      kind: 'choice', label: opt.label,
+      delta: { men: p.d.men, food: p.d.food, window: p.d.window, trust: p.d.trust },
+      sin: opt.sin ? opt.sin.type : null, hunger: s.food <= 0,
+      menAfter: s.men, foodAfter: s.food, windowAfter: s.window, trustAfter: s.trust,
+      blank: s.board.blanks, note: (s.flags.lastNotes || []).slice(-1)[0] || ''
+    });
+    if (opt.recruit && COMRADES[opt.recruit]) Memory.add('saved', '把' + COMRADES[opt.recruit].name + '编进了队伍');
+    if (s.food <= 0) Memory.add('shared_hunger', '断粮的一格');
     if (opt.sin) Sin.register(opt.sin);
     Store.save();
     if (after) after();
@@ -1215,6 +1755,7 @@ const Game = {
         text: '让 ' + COMRADES[id].name + ' 顶上去', kind: i === 0 ? 'primary' : 'ghost',
         onClick: () => {
           s.comrades.splice(i, 1);
+          Memory.add('abandoned', '让' + COMRADES[id].name + '顶上去');
           const saved = Math.min(BALANCE.mateSave, p.loss);
           p.loss -= saved;
           p.d.men = p.gain - p.loss;
@@ -1264,7 +1805,7 @@ const Game = {
     (node.gainCards || []).forEach(id => { if (CARDS[id] && s.hand.indexOf(id) < 0) s.hand.push(id); });
     /* 大关卡第一次打下来才有缴获与休整：主走廊 42 格的固定支出靠这一段回补。
        粮／时／兵三样只能带一样 —— 这是四条资源之间唯一一次真正的交换。 */
-    if (first && node.kind === 'gate') { this.gateSpoils(node); return; }
+    if (first && node.kind === 'gate') { Memory.receipt(); this.gateSpoils(node); return; }
     this.postChoice(node);
   },
 
@@ -1364,7 +1905,8 @@ const Game = {
       (node.epilogue ? `<p class="quote">${esc(node.epilogue)}</p>` : '');
     Router.open({
       title: node.name, kicker: (node.date || '') + ' · 剧情翻面', size: 'wide', cinematic: true, blocking: true,
-      closable: false,
+      art: node.art || (typeof GATE_ART !== 'undefined' ? GATE_ART[node.id] : null),
+      motion: node.motion, closable: false,
       html: html + (node.epilogue ? '' : ''),
       actions: [{
         text: '把这一段的史料记进名册', kind: 'primary',
@@ -1426,6 +1968,7 @@ const Game = {
 const Sin = {
   register(sin) {
     const s = Store.s;
+    Memory.add('sin_witness', '没有拦下「' + (s.flags.lastChoiceLabel || '那件事') + '」');
     const was = s.sin >= 3;
     s.sin += (sin.n || 1);
     if (s.sinTypes.indexOf(sin.type) < 0) s.sinTypes.push(sin.type);
@@ -1466,6 +2009,7 @@ const Sin = {
     const last = Store.s.runsFailed + Store.s.runsWarn >= BALANCE.fallLimit - 1;
     Router.open({
       title: '多行不义必自毙', kicker: '警示 · ' + scene.title, size: 'wide', cinematic: true, blocking: true, closable: false,
+      art: 'cg-17',
       html: `
         <p class="cg big">${esc(scene.body)}</p>
         <div class="warn-block">
@@ -1495,7 +2039,7 @@ const Flow = {
     Store.meta.wall.push(this.boardSnapshot('正常行军 · 部队打散'));
     Store.meta.plays += 1;
     Router.open({
-      title: '下一程', kicker: '不写 Game Over', size: 'mid', cinematic: true, closable: false, blocking: true,
+      title: '下一程', kicker: '不写 Game Over', size: 'mid', cinematic: true, closable: false, blocking: true, art: 'cg-18',
       html: `<p class="cg big">天亮时，收容队把你架了起来。有人把干粮塞进你手里，说：队伍还在走，你也接着走。</p>
         <p class="cg">红军当年真有收容队：走在最后，专门收掉队的人，团后卫之后再派坚强的收容队。掉队不等于失败，被接住就是接着打。</p>
         <p class="costline">本程木牌已挂上名单墙：${s.board.names.length} 个名字 · 行至 ${esc(node.name)}</p>`,
@@ -1555,13 +2099,6 @@ const History = {
 };
 
 /* ---------- Pages：链接式页面（全部走弹窗） ---------- */
-function signLine(withLink) {
-  const leader = TEAM.filter(t => t.role.indexOf('队长') >= 0).map(t => t.name).join('、');
-  const mates = TEAM.filter(t => t.role.indexOf('队长') < 0).map(t => t.name).join('、');
-  return `<p class="src sign">《${esc(COURSE.work)}》 · ${esc(COURSE.name)} · ${esc(COURSE.theme)}<br>` +
-    `制作：队长 ${esc(leader)} · 组员 ${esc(mates)}` +
-    (withLink === false ? '' : ' · <a data-link="team" href="#">制作与分工</a>') + '</p>';
-}
 
 const Pages = {
 
@@ -1631,54 +2168,65 @@ const Pages = {
         <li><b>下一程</b>：作战、冻饿、掉队。收容队把你接回去，宽慰与鼓励，木牌挂<b>正名区</b>。</li>
         <li><b>多行不义必自毙</b>：违纪选项可以选、当场有甜头；标记累积到 3，一到三个事件内必收账，不可回避、战友卡挡不住。木牌挂<b>警示区</b>。</li>
       </ul>
-      <p class="src">本作品为思政实践作业，史实分级 A（权威记载）/ R（回忆转述）/ ?（待核实）。地图为路线示意图，省界非精确边界。</p>`,
+      <p class="src">本游戏史实分级 A（权威记载）/ R（回忆转述）/ ?（待核实）。地图为路线示意图，省界非精确边界。</p>`,
       actions: [{ text: '知道了', kind: 'primary' }]
     });
   },
 
-  /* 交作业时要给老师看的一页：选题理由、机制取舍、史料纪律、AI 辅助范围、未完成部分 */
-  credits() {
-    const rows = TEAM.map(t => `
-      <div class="team-row${t.role.indexOf('队长') >= 0 ? ' lead' : ''}">
-        <b>${esc(t.name)}</b><span class="team-role">${esc(t.role)}</span>
-        ${t.duty ? `<p>${esc(t.duty)}</p>` : ''}
-      </div>`).join('');
+
+  /* 战友记忆页：把结构化事实摊开给玩家看，就是「AI NPC 有记忆」的证据 */
+  memory() {
+    const s = Store.s;
+    const list = (s.mem || []).slice().reverse();
+    const html = list.length ? list.map((m, i) => `
+      <div class="cell ${m.seen ? '' : 'fresh'}">
+        <b>${esc(m.place || '路上')} · ${esc(MEM_KIND[m.kind] || m.kind)}</b>
+        <p>${esc(m.what || '')}</p>
+        <p class="dim" id="mem-line-${i}">${esc(Memory.template(m))}</p>
+      </div>`).join('') : '<p class="dim">还没有发生过会被记住的事。</p>';
     Router.open({
-      title: '制作与分工', kicker: COURSE.name, size: 'wide',
-      html: `
-      <h3>作业信息</h3>
-      <ul>
-        <li>课程：<b>${esc(COURSE.name)}</b>（${esc(COURSE.term)}）</li>
-        <li>选题：${esc(COURSE.theme)}</li>
-        <li>形式：${esc(COURSE.form)} —— 单文件网页游戏，本地双击即玩，无后端、无外链</li>
-      </ul>
-      <h3>为什么做这个</h3>
-      <p class="lead">九十年前那条路，容易被背成一串年份。这个作品把它换成一次要走的选择：兵、粮、时、民四样互相牵住，每按下一个选项，代价当场落在具体的人身上 —— 而不是落在分数上。</p>
-      <h3>机制与取舍</h3>
-      <ul>
-        <li><b>四条资源</b>：兵是建制完整度，粮是可撑的天份，时是追兵窗口，民是沿途人心。缺哪一条，最后都用「人」来结算。</li>
-        <li><b>选项不标价</b>：按下去之前不给数值，按完之后<b>每个选项旁边原地亮账</b>停几秒。先判断再看账，是为了不让人对着数字挑最便宜的那一项。</li>
-        <li><b>失败不写 Game Over</b>：部队打散是「下一程」，收容队把你接住，木牌上的名字不清零；三次走不到，才有「没有走到吴起镇」。</li>
-        <li><b>多行不义必自毙</b>：违纪选项可以选、当场有甜头，账延迟两三格才收，而且战友挡不住 —— 想让人自己算出纪律不是道德要求，是生存条件。</li>
-        <li><b>木牌与名单墙</b>：一块空白杉木牌从于都河背到吴起镇，宿营地和伤亡都刻在上面；重开的动机不是赢，是让更多人被人记住。</li>
-      </ul>
-      <h3>史料怎么核对</h3>
-      <ul>
-        <li>${HISTORY.length} 条史料逐条挂出处，三级标记：<span class="grade g-A">A</span> 权威记载 · <span class="grade g-R">R</span> 回忆转述 · <span class="grade g-?">?</span> 待核实。</li>
-        <li>核不到原文的只写来源名并标「待核实」，不补写、不编造；语文课文与文学创作不当作史实使用；两个「云贵川」不并成一个人。</li>
-        <li>数字口径见顶栏「<a data-link="help" href="#">规则手册</a>」与「<a data-link="history" href="#">史料与出处</a>」；地图为路线示意图，省界是手绘近似。</li>
-      </ul>
-      <h3>AI 辅助的范围</h3>
-      <ul>
-        <li>用在哪里：史料检索与出处整理、设计文档结构梳理、代码草稿、数值跑测脚本与曲线校准。</li>
-        <li>不靠它决定：选题、玩法机制与节点取舍、全部文案定稿、数值的最终口径 —— 这几项由本人判断并承担。</li>
-      </ul>
-      <h3>还没做完的</h3>
-      <p class="note-hint">终章目前只有「念名字」与「没有走到吴起镇」两段文本，设计稿里的「空格」「文物」两个结局条件尚未实现；CG 分镜只有文字，美术位与音频留空；名单墙还没有单局复盘页；难度数值仍在校准，未到定稿。</p>
-      <h3>制作名单</h3>
-      ${rows}
-      ${signLine(false)}`,
+      title: '战友记忆', kicker: '他们记得你做过什么', size: 'wide',
+      html: `<p class="lead">记忆只记引擎里真实发生过的事。AI 只负责把措辞改成一句人话；越界、超时或断网，一律回模板。</p>
+        <div class="grid">${html}</div>`,
       actions: [{ text: '关闭', kind: 'ghost' }]
+    });
+    /* 最新一条若有 AI 通道，异步改写措辞；失败/越界保持模板 */
+    if (list.length) {
+      Memory.refine(list[0]).then(t => {
+        const el = document.getElementById('mem-line-0');
+        if (el && t) el.textContent = t;
+      }).catch(() => {});
+    }
+  },
+
+  /* 存档码：复制出去、粘贴回来就能续上 */
+  codePage() {
+    const s = Store.s;
+    const current = Store.exportCode() || '';
+    const place = (NODE_BY_ID[s.at] || {}).name || '';
+    Router.open({
+      title: '存档码', kicker: '把这一程带走 · 换设备也能续', size: 'mid',
+      html: `<p class="lead">复制下面这段码，回来粘贴，接着走。换设备、清了浏览器也能续上。</p>
+        <p class="note-hint">当前：第 ${s.run} 程 · 行至 ${esc(place)} · 木牌 ${s.board.names.length} 个名字 · 馆藏 ${s.items.length}/${Object.keys(ITEMS).length}</p>
+        <textarea id="code-box" class="code-box" spellcheck="false" rows="5">${esc(current)}</textarea>
+        <p class="note-hint">只存本机浏览器状态，不含个人信息。名单墙带最近 6 块、日志带最近 20 条；载入会覆盖当前进度。</p>`,
+      actions: [
+        { text: '复制', kind: 'ghost', onClick: () => {
+            const t = $('#code-box');
+            if (t) { t.select(); try { document.execCommand('copy'); Toast.show('已复制存档码'); }
+              catch (e) { Toast.show('请手动全选复制'); } }
+            return true;
+          } },
+        { text: '载入这段码', kind: 'primary', onClick: () => {
+            const v = ($('#code-box') || {}).value || '';
+            if (Store.importCode(v)) {
+              Router.closeAll(); MapView.recenter(); Hud.render();
+              Toast.show('已载入，接着走');
+            } else Toast.show('这段码读不出来，请检查是否复制完整');
+            return true;
+          } },
+        { text: '关闭', kind: 'ghost' }
+      ]
     });
   },
 
@@ -1692,9 +2240,14 @@ const Pages = {
           <b>${esc(c.name)}</b><p>${esc(c.desc)}</p>
           ${CARD_FX[c.id] ? '' : '<p class="dim">本版仅叙事，未接入数值</p>'}
         </div>`).join('') + `</div>`).join('')
-      + `<h3>道具</h3><div class="grid">` + (s.items.length ? s.items.map(id => `
-        <div class="cell item"><b>${esc(ITEMS[id].name)}</b><p>${esc(ITEMS[id].note)}</p><p class="lore-s">${esc(ITEMS[id].src)}</p></div>`).join('')
-        : '<p class="dim">还没有拿到道具。</p>') + `</div>`;
+      /* S8 馆藏：看得见的收集度 + 未收集暗格（只写出处，不剧透内容） */
+      + `<h3>馆藏 ${s.items.length}/${Object.keys(ITEMS).length}</h3><div class="grid">` +
+        Object.keys(ITEMS).map(id => {
+          const it = ITEMS[id], got = s.items.indexOf(id) >= 0;
+          return got
+            ? `<div class="cell item"><b>${esc(it.name)}</b><p>${esc(it.note)}</p><p class="lore-s">${esc(it.src)}</p></div>`
+            : `<div class="cell item missing"><b>未收集</b><p class="lore-s">出处：${esc(String(it.src || '').slice(0, 40))}</p></div>`;
+        }).join('') + `</div>`;
     Router.open({ title: '手法卡与道具', kicker: '你手上的东西', size: 'wide', html, actions: [{ text: '关闭', kind: 'ghost' }] });
   },
 
@@ -1802,11 +2355,11 @@ const Pages = {
   },
   intro() {
     Router.open({
-      title: '长征：万水千山', kicker: 'v1 初版', size: 'wide', cinematic: true, closable: false, blocking: true,
+      title: '长征：万水千山', kicker: 'v1 初版', size: 'wide', cinematic: true, closable: false, blocking: true, art: 'cg-01',
       html: `<p class="cg big">十月下旬，于都河上搭起浮桥。八万余人要在三个夜里渡完。</p>
         <p class="cg">你不是指挥全局的人，你是这支队伍的指挥员。你手里有一块空白杉木牌，用来记宿营地和伤亡名单。</p>
         <p class="cg dim">出发时同村三个：通信员小谢、警卫员老范、担架队长三伢子。走到终章时，只剩一个。</p>
-        <p class="src">史实分级 A／R／? ；地图为路线示意图。数据与文案出处见「史料与出处」。</p>${signLine()}`,
+        <p class="src">史实分级 A／R／? ；地图为路线示意图。数据与文案出处见「史料与出处」。</p>`,
       actions: [
         { text: '开始这一程', kind: 'primary', onClick: () => { setTimeout(() => Pages.notes(() => Game.enter(NODE_BY_ID['g1'])), 120); } },
         { text: '先看规则', kind: 'ghost', onClick: () => { setTimeout(() => Pages.help(), 120); return true; } }
@@ -1828,6 +2381,19 @@ const Toast = {
 
 /* ---------- Ending ---------- */
 const Ending = {
+  /* S7 木牌亲手刻字：划一下浮现一格；留白格永远不填满（泸定桥只找齐 12 个名字） */
+  bindCarve() {
+    const stage = $('#carve-stage'); if (!stage) return;
+    const names = $$('.carve-name', stage);
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      names.forEach(n => n.classList.add('revealed')); return;
+    }
+    let i = 0;
+    const reveal = () => { if (i < names.length) names[i++].classList.add('revealed'); };
+    stage.addEventListener('pointermove', reveal);
+    stage.addEventListener('pointerdown', reveal);
+  },
+
   run() {
     const s = Store.s;
     const hasLetter = s.items.indexOf('it_letter') >= 0;
@@ -1842,17 +2408,24 @@ const Ending = {
     html += `<p class="cg">吴起镇的窑洞前，他把木牌上的名字一个一个念出来。念到最后一个，他停住了——那是同乡里的第三个，没有跟上来。</p>
       <p class="cg dim">画面里只有木牌和一只手。没有“胜利”二字。</p>`;
     if (hasBlank) {
-      html += `<p class="cg">牌上还留着 ${s.board.blanks} 格空白。泸定桥二十二个勇士，只找齐十二个名字；写《十七个强渡的英雄》的人，把自己那一格空掉了。</p>`;
+      html += `<p class="cg">牌上还留着 ${s.board.blanks} 格空白。泸定桥二十二名勇士只找齐十二个名字；当年写《十七个强渡的英雄》的人，把自己那一格空在名单外。有些名字，是故意不填的。</p>`;
     }
     if (readRatio >= .5) {
-      html += `<p class="cg">最后放上来的是物件：泸定桥的十三根铁索、半截皮带、黄花草标本、盖了苏维埃财政印章的借据、缝进百褶裙夹层的队旗。</p>`;
+      html += `<p class="cg">最后放上来的是物件——没有一件写着胜利：泸定桥的十三根铁索、半截皮带、黄花草标本、盖了苏维埃财政印章的借据、缝进百褶裙夹层的队旗。</p>`;
     }
+    html += `<div class="carve-stage" id="carve-stage">
+        <div class="carve-board">${s.board.names.map(n => `<span class="carve-name">${esc(n)}</span>`).join('') ||
+          '<span class="carve-blank">（空）</span>'}${'<span class="carve-blank"></span>'.repeat(Math.min(10, s.board.blanks))}</div>
+        <p class="carve-hint">用鼠标或手指在牌面上划一下，名字逐格浮现。留白格不会填满 —— 泸定桥二十二个勇士，只找齐十二个名字。</p>
+      </div>`;
+    html += `<p class="cg dim" id="chronicle-line"></p>`;
     html += `<p class="costline">这一程走完：兵 ${s.men} · 粮 ${s.food} · 民 ${s.trust} · 木牌 ${s.board.names.length} 个名字 · 违纪标记 ${s.sin}</p>
-      <p class="note-hint">红二十五军战斗员平均年龄不到十八岁。使他们过湘江、雪山、草地的，很多是孩子。</p>${signLine()}`;
+      <p class="note-hint">红二十五军战斗员平均年龄不到十八岁。使他们过湘江、雪山、草地的，很多是孩子。</p>`;
     Router.open({
-      title: '念名字', kicker: '终章 · 1935.10.19 吴起镇', size: 'wide', cinematic: true, closable: false, blocking: true,
+      title: '念名字', kicker: '终章 · 1935.10.19 吴起镇', size: 'wide', cinematic: true, closable: false, blocking: true, art: 'cg-15',
       html,
       actions: [
+        { text: '导出这一程', kind: 'ghost', onClick: () => { Share.download(Chronicle.excerpt()); return true; } },
         { text: '把木牌挂上名单墙', kind: 'primary', onClick: () => {
             Store.meta.wall.push(Flow.boardSnapshot('走到吴起镇'));
             Store.meta.best = Math.max(Store.meta.best, s.board.names.length);
@@ -1866,6 +2439,7 @@ const Ending = {
           } }
       ]
     });
+    setTimeout(() => { this.bindCarve(); Chronicle.install('chronicle-line', '白话'); }, 0);
   },
 
   /* 第三次打散／违纪：收容队不会再来。这是唯一一个"走不到"的终章 */
@@ -1885,10 +2459,13 @@ const Ending = {
          <p class="cg dim">长征不是一支队伍走完的。留在南方苏区的那些人，后来成了坚持三年游击战争的红军——他们没有走到陕北，但他们走的那一段，也是这条路的一部分。</p>`;
     Router.closeAll();
     Router.open({
-      title: '没有走到吴起镇', kicker: '终章 · 行至' + np, size: 'wide', cinematic: true, closable: false, blocking: true,
-      html: head + `<p class="costline">行至 ${esc(np)} · 走过 ${Object.keys(s.visited).length} 格 · 木牌 ${s.board.names.length} 个名字 · 违纪标记 ${s.sin}</p>
-        <p class="note-hint">这一程到这里为止。木牌挂上名单墙，名字一个不清零。</p>${signLine()}`,
-      actions: [{
+      title: '没有走到吴起镇', kicker: '终章 · 行至' + np, size: 'wide', cinematic: true, closable: false, blocking: true, art: 'cg-17',
+      html: head + `<p class="cg dim" id="chronicle-line"></p>
+        <p class="costline">行至 ${esc(np)} · 走过 ${Object.keys(s.visited).length} 格 · 木牌 ${s.board.names.length} 个名字 · 违纪标记 ${s.sin}</p>
+        <p class="note-hint">这一程到这里为止。木牌挂上名单墙，名字一个不清零。</p>`,
+      actions: [
+        { text: '导出这一程', kind: 'ghost', onClick: () => { Share.download(Chronicle.excerpt()); return true; } },
+        {
         text: '把木牌挂上名单墙', kind: 'primary',
         onClick: () => {
           Store.meta.best = Math.max(Store.meta.best, s.board.names.length);
@@ -1901,12 +2478,13 @@ const Ending = {
         }
       }]
     });
+    setTimeout(() => Chronicle.install('chronicle-line', '白话'), 0);
   }
 };
 
 /* ---------- 启动 ---------- */
 Game.debug = {
-  Store, Router, Hud, MapView, Sin, Flow, Pages, Ending, History, Toast, Game,
+  Store, Router, Hud, MapView, Sin, Flow, Pages, Ending, History, Toast, Game, Sound, Share, Chronicle, Memory,
   NODE_BY_ID, EDGES, NODES, MOVE_EVENTS, CARDS, ITEMS, REGIONS, HISTORY, DISCIPLINE, ENEMIES, COMRADES,
   CARD_FX, ADJ, RES, BALANCE,
   /* 只想看某一条行进事件怎么写出来的时候用：Game.debug.event('mv_mule', 1)

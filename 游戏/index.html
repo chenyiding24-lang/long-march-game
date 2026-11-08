@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#26231f">
-<meta name="description" content="长征：万水千山 —— 统帅视角的思政实践作业文字游戏，二万五千里路线示意图 + 四资源抉择。">
+<meta name="description" content="长征：万水千山 —— 统帅视角的文字游戏，二万五千里路线示意图 + 四资源抉择。">
 <title>长征：万水千山 · v1 初版</title>
-<link rel="icon" href="favicon.svg?v=4" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="icon" href="favicon.svg?v=34" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=34">
 </head>
 <body>
+<a class="skip" href="#viewport">跳到地图</a>
 <div id="app">
 
   <!-- 顶栏：链接式导航，不做下拉菜单 -->
@@ -25,7 +26,9 @@
       <button class="navlink" id="nav-wall">名单墙</button>
       <button class="navlink" id="nav-history">史料与出处</button>
       <button class="navlink" id="nav-help">规则手册</button>
-      <button class="navlink" id="nav-team">制作与分工</button>
+      <button class="navlink" id="nav-memory">战友记忆</button>
+      <button class="navlink" id="nav-code">存档码</button>
+      <a class="navlink nav-3d" href="route3d.html?v=34" target="_blank" rel="noopener">3D 路线长卷</a>
       <button class="navlink dim" id="reset-btn">清空存档</button>
     </nav>
   </header>
@@ -72,13 +75,27 @@
   <div id="toast" role="status" aria-live="polite"></div>
 
   <footer id="footbar">
-    <span>思政实践作业作品 · 史实分级 A（权威记载）／R（回忆转述）／?（待核实）</span>
+    <span>史实分级 A（权威记载）／R（回忆转述）／?（待核实）</span>
     <span>地图为路线示意图，省界非精确边界；数字口径与出处见「史料与出处」</span>
-    <span id="foot-team"></span>
   </footer>
 </div>
 
-<script src="data.js?v=4"></script>
-<script src="game.js?v=4"></script>
+<script src="data.js?v=34"></script>
+<script src="game.js?v=34"></script>
+<script>
+/* 2D → 3D 相容入口：点"3D 路线长卷"时带上当前所在节点，3D 里直接落到该事件地标。
+   两个模式共用同一份节点 id（s.at），因此 3D 的地标就是 2D 事件的伏笔现场。 */
+document.addEventListener('DOMContentLoaded', function () {
+  var a = document.querySelector('.navlink.nav-3d');
+  if (!a) return;
+  a.addEventListener('click', function () {
+    try {
+      var raw = localStorage.getItem('cwqs_save_v1');
+      var at = raw ? (JSON.parse(raw) || {}).at : null;
+      if (at) a.href = 'route3d.html?v=34&node=' + encodeURIComponent(at);
+    } catch (e) { /* 无档时就用默认全景 */ }
+  });
+});
+</script>
 </body>
 </html>

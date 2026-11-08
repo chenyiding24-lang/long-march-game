@@ -7,9 +7,10 @@
   --paper-2: #e6dcc4;
   --ink: #26231f;
   --ink-2: #4c463c;
+  --ink-3: #5c5346;
   --line: #b3a68a;
-  --red: #a8342a;
-  --red-2: #b5382b;
+  --red: #8C3B2E;
+  --red-2: #7a3326;
   --river: #4a6f7c;
   --grass: #4d7a52;
   --gold: #a5813a;
@@ -30,6 +31,10 @@ body {
 }
 #app { display: flex; flex-direction: column; height: 100vh; }
 
+/* V8 跳转链接：默认离屏，键盘聚焦时显现 */
+.skip { position: absolute; left: -9999px; top: 8px; background: var(--red); color: #f6ecd8; padding: 8px 14px; border-radius: 2px; text-decoration: none; font-family: var(--serif); letter-spacing: 2px; z-index: 9998; }
+.skip:focus { left: 8px; z-index: 9999; }
+
 /* ---------- 顶栏 ---------- */
 #topbar {
   flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
@@ -48,7 +53,7 @@ body {
   margin: 0; font-size: 21px; letter-spacing: 6px; font-weight: 600;
   color: #f0e6d2; text-shadow: 0 1px 0 #000;
 }
-.brand-sub { font-family: var(--sans); font-size: 11px; color: #857c6c; letter-spacing: 1px; }
+.brand-sub { font-family: var(--sans); font-size: 11px; color: #9a9282; letter-spacing: 1px; }
 #topnav { display: flex; gap: 4px; flex-wrap: wrap; }
 .navlink {
   font-family: var(--serif); font-size: 14px; letter-spacing: 1px;
@@ -56,6 +61,10 @@ body {
   color: #cbbda3; padding: 6px 10px; cursor: pointer; transition: .18s;
 }
 .navlink:hover { color: #fff; border-bottom-color: var(--red); }
+/* 顶栏里的 3D 入口是 <a>，去掉下划线并跟按钮对齐 */
+a.navlink { text-decoration: none; display: inline-block; }
+a.navlink.nav-3d { color: #d9b48a; }
+a.navlink.nav-3d:hover { color: #fff; border-bottom-color: var(--red); }
 .navlink.dim { color: #6d6558; }
 .navlink.dim:hover { color: #d8c9b0; border-bottom-color: #6d6558; }
 
@@ -99,6 +108,9 @@ body.modal-open .res-val { font-size: 16px; }
 .res.low .res-val { color: #f0a092; }
 .res.zero .res-val { color: #fff; animation: blink 1.1s infinite; }
 .res.low .res-label { color: #f0a092; }
+/* V6 非颜色线索：low/zero 加文字徽标，色盲 / 低视力也能辨（aria 语义见 game.js Hud.render） */
+.res.low .res-label::after { content: ' 低'; margin-left: 3px; font-family: var(--sans); font-size: 10px; letter-spacing: 1px; }
+.res.zero .res-label::after { content: ' 缺'; margin-left: 3px; font-family: var(--sans); font-size: 10px; letter-spacing: 1px; }
 .res-sub { grid-column: 1 / -1; font-family: var(--sans); font-size: 11px; color: #8b8171; }
 .res-extra { grid-template-columns: 22px 40px auto; }
 @keyframes blink { 50% { opacity: .35; } }
@@ -265,12 +277,12 @@ body.far-view #vignette { opacity: .5; }
 .map-seal:hover { background: var(--red-2); }
 .map-note {
   position: absolute; z-index: 20; left: 20px; bottom: 68px;
-  font-family: var(--sans); font-size: 11px; letter-spacing: 1px; color: #7f7768;
+  font-family: var(--sans); font-size: 11px; letter-spacing: 1px; color: #9a9282;
 }
 .compass { position: absolute; z-index: 20; right: 20px; bottom: 96px; text-align: center; color: #a1957f; }
 .compass span { font-size: 15px; display: block; }
 .compass i { display: block; width: 1px; height: 34px; margin: 4px auto; background: linear-gradient(#a1957f, transparent); }
-.compass em { font-family: var(--sans); font-size: 10px; font-style: normal; color: #6f675a; }
+.compass em { font-family: var(--sans); font-size: 10px; font-style: normal; color: #9a9282; }
 
 /* 底部手牌托盘 */
 .bottom-trays {
@@ -349,10 +361,10 @@ body.modal-open .modal { max-height: 76vh; }
 .btn.ghost { border-color: rgba(122,111,87,.5); color: #6b614f; }
 
 .lead { font-size: 16.5px; line-height: 1.95; margin: 0 0 12px; }
-.brief { font-family: var(--sans); font-size: 12px; letter-spacing: 1px; color: #7b7261; margin: 0 0 14px; }
+.brief { font-family: var(--sans); font-size: 12px; letter-spacing: 1px; color: var(--ink-3); margin: 0 0 14px; }
 .quote { border-left: 3px solid var(--red); padding-left: 14px; color: #4c463c; line-height: 1.9; }
-.dim { color: #8b8271; }
-.src { font-family: var(--sans); font-size: 11px; color: #8b8271; line-height: 1.8; }
+.dim { color: var(--ink-3); }
+.src { font-family: var(--sans); font-size: 11px; color: var(--ink-3); line-height: 1.8; }
 .rule-note {
   font-family: var(--sans); font-size: 12px; color: #5c6b5f; background: rgba(77,122,82,.1);
   border: 1px solid rgba(77,122,82,.32); padding: 8px 12px; border-radius: 2px; line-height: 1.8;
@@ -430,6 +442,57 @@ body.modal-open .modal { max-height: 76vh; }
 .cg { font-size: 17px; line-height: 2.1; margin: 0 0 16px; letter-spacing: .5px; }
 .cg.big { font-size: 20px; }
 .cg.dim { color: #a89c86; font-size: 15.5px; }
+
+/* ---------- CG 放映机：会动的静帧（17 §6.1 / 18 §九），纯 CSS + canvas，零依赖 ---------- */
+.cg-stage { position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
+.cg-stage.no-art { display: none; }   /* 图没生成或加载失败：只留原来的文字 CG */
+.cg-img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: .82; transform-origin: 50% 55%; will-change: transform;
+}
+.cg-weather { position: absolute; inset: 0; width: 100%; height: 100%; opacity: .9; }
+.cg-scrim {
+  position: absolute; inset: 0;
+  background: linear-gradient(180deg, rgba(12,10,8,.12) 0%, rgba(12,10,8,.30) 42%, rgba(12,10,8,.78) 100%);
+}
+.modal-mask.cinematic .modal::before { z-index: 2; }
+.modal-mask.cinematic .modal > header,
+.modal-mask.cinematic .modal > .modal-body,
+.modal-mask.cinematic .modal > .modal-foot { position: relative; z-index: 1; }
+.modal-mask.cinematic .modal-body { text-shadow: 0 1px 6px rgba(0,0,0,.75); }
+.modal-mask.cinematic .modal-body .cg { color: #f0e6d2; }
+.modal-mask.cinematic .modal-body .cg.dim { color: #c9bda6; }
+
+/* Ken Burns 缓推 / 横移，8～14s；文字逐段淡入 */
+@keyframes cg-zoom-in  { from { transform: scale(1.02); } to { transform: scale(1.13); } }
+@keyframes cg-pan-left  { from { transform: scale(1.10) translateX(2.5%); }  to { transform: scale(1.10) translateX(-2.5%); } }
+@keyframes cg-pan-right { from { transform: scale(1.10) translateX(-2.5%); } to { transform: scale(1.10) translateX(2.5%); } }
+@keyframes cg-pan-up    { from { transform: scale(1.10) translateY(2%); }    to { transform: scale(1.10) translateY(-2%); } }
+@keyframes cg-fade      { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+.cg-stage.motion-zoom-in  .cg-img { animation: cg-zoom-in  12s ease-out forwards; }
+.cg-stage.motion-pan-left .cg-img { animation: cg-pan-left  13s ease-out forwards; }
+.cg-stage.motion-pan-right .cg-img { animation: cg-pan-right 13s ease-out forwards; }
+.cg-stage.motion-pan-up   .cg-img { animation: cg-pan-up   13s ease-out forwards; }
+.modal-mask.cinematic .modal-body > .cg { animation: cg-fade 1.1s ease-out both; }
+.modal-mask.cinematic .modal-body > .cg:nth-child(2) { animation-delay: .35s; }
+.modal-mask.cinematic .modal-body > .cg:nth-child(3) { animation-delay: .7s; }
+
+/* 无障碍：系统要求减少动效时，运镜、粒子、文字淡入全部关，只留静帧 */
+@media (prefers-reduced-motion: reduce) {
+  .cg-stage .cg-img { animation: none !important; }
+  .cg-weather { display: none; }
+  .modal-mask.cinematic .modal-body > .cg { animation: none !important; }
+  /* V7 关闭地图装饰循环，保留静态高亮（红圈常显不转） */
+  .route.now { animation: none !important; }
+  .node.reach .hit { animation: none !important; }
+  .node.next .next-halo, .node.next .next-ring { animation: none !important; }
+  .army-pulse { animation: none !important; }
+  .next-pill .np-go { animation: none !important; }
+  #next-arrow { animation: none !important; }
+  .res.zero .res-val { animation: none !important; }
+  .float { animation: none !important; }
+}
+
 .lore-list { margin: 8px 0 6px; }
 .lore { border-top: 1px solid rgba(200,186,160,.2); padding: 12px 0; }
 .lore-top { display: flex; align-items: center; gap: 10px; }
@@ -449,17 +512,6 @@ body.modal-open .modal { max-height: 76vh; }
 .warn-block p { font-size: 14.5px; line-height: 1.95; color: #e2d8c2; margin: 0; }
 .verbatim { font-style: italic; border-left: 3px solid var(--warn); padding-left: 12px; }
 .invite { color: #cbbda3 !important; }
-
-/* 制作与分工 */
-.team-row {
-  display: grid; grid-template-columns: auto auto; gap: 0 10px; align-items: baseline;
-  border-left: 2px solid rgba(122,111,87,.45); padding: 6px 0 6px 12px; margin-bottom: 6px;
-}
-.team-row b { font-size: 15.5px; letter-spacing: 2px; }
-.team-row .team-role { font-family: var(--sans); font-size: 11px; color: #8b8271; letter-spacing: 1px; }
-.team-row p { grid-column: 1 / -1; font-family: var(--sans); font-size: 12px; color: #5f594c; line-height: 1.85; margin: 4px 0 0; }
-.team-row.lead { border-left-color: var(--red); }
-.src.sign a { color: var(--river); }
 
 /* 史料页 */
 .hist-wrap { display: grid; grid-template-columns: 176px 1fr; gap: 18px; }
@@ -532,7 +584,7 @@ kbd { font-family: var(--sans); font-size: 11px; border: 1px solid #a2957a; bord
 #footbar {
   flex: 0 0 auto; display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap;
   padding: 6px 20px; background: #100e0b; border-top: 1px solid #322d25;
-  font-family: var(--sans); font-size: 10.5px; color: #6b6458; letter-spacing: 1px; z-index: 30;
+  font-family: var(--sans); font-size: 10.5px; color: #9a9282; letter-spacing: 1px; z-index: 30;
 }
 
 /* 小屏 */
@@ -613,4 +665,43 @@ kbd { font-family: var(--sans); font-size: 11px; border: 1px solid #a2957a; bord
 @media (hover: none) {
   .chip:hover, .node:hover .n-label { transform: none; }
   .navlink:hover { border-bottom-color: transparent; }
+}
+
+/* ---------- T4：存档码 / 馆藏 / 音效 / 民心回响 / 木牌刻字 ---------- */
+.code-box {
+  width: 100%; font-family: var(--mono, monospace); font-size: 11.5px; line-height: 1.7;
+  color: #3a352c; background: #fffdf7; border: 1px solid rgba(122,111,87,.5);
+  border-radius: 2px; padding: 10px; resize: vertical; word-break: break-all;
+}
+.res-sound {
+  font-family: var(--sans); font-size: 10.5px; letter-spacing: 1px; cursor: pointer;
+  color: #6b614f; background: none; border: 1px solid rgba(122,111,87,.45);
+  border-radius: 2px; padding: 2px 6px; margin-top: 4px;
+}
+.res-sound.on { color: #7c2f22; border-color: rgba(124,47,34,.6); }
+.echo {
+  margin: 8px 0 0; font-family: var(--serif); font-size: 13.5px; line-height: 1.95;
+  color: #5c5346; border-top: 1px dashed rgba(168,52,42,.3); padding-top: 8px;
+}
+.cell.item.missing { opacity: .48; background: rgba(122,111,87,.08); }
+.cell.fresh { border-left: 3px solid var(--red); }
+.cell.item.missing b { color: #7b7261; font-weight: 400; }
+
+/* 终章木牌刻字：名字逐格浮现，留白格永远不填满 */
+.carve-stage { margin: 14px 0 10px; user-select: none; }
+.carve-board {
+  display: flex; flex-wrap: wrap; gap: 6px 10px; padding: 14px 16px;
+  background: linear-gradient(160deg, #6a563c, #4d3f2c);
+  border: 1px solid rgba(200,186,160,.25); border-radius: 3px; min-height: 76px;
+}
+.carve-name, .carve-blank {
+  font-family: var(--serif); font-size: 14px; letter-spacing: 1px;
+  border-bottom: 1px solid rgba(230,220,196,.35); padding: 2px 1px; min-width: 44px;
+}
+.carve-name { color: #f0e6d2; opacity: 0; transform: translateY(3px); transition: opacity .45s, transform .45s; }
+.carve-name.revealed { opacity: 1; transform: none; }
+.carve-blank { color: #a89c86; border-bottom-style: dashed; }
+.carve-hint { font-family: var(--sans); font-size: 11px; color: #9c917c; margin: 8px 0 0; line-height: 1.8; }
+@media (prefers-reduced-motion: reduce) {
+  .carve-name { transition: none; opacity: 1; transform: none; }
 }
