@@ -2355,7 +2355,7 @@ const Pages = {
   },
   intro() {
     Router.open({
-      title: '长征：万水千山', kicker: 'v1 初版', size: 'wide', cinematic: true, closable: false, blocking: true, art: 'cg-01',
+      title: '长征：万水千山', kicker: '平面行军 · 第一程', size: 'wide', cinematic: true, closable: false, blocking: true, art: 'cg-01',
       html: `<p class="cg big">十月下旬，于都河上搭起浮桥。八万余人要在三个夜里渡完。</p>
         <p class="cg">你不是指挥全局的人，你是这支队伍的指挥员。你手里有一块空白杉木牌，用来记宿营地和伤亡名单。</p>
         <p class="cg dim">出发时同村三个：通信员小谢、警卫员老范、担架队长三伢子。走到终章时，只剩一个。</p>

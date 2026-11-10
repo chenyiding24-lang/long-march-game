@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>万水千山 · 长征全线立体地图</title>
+<meta name="description" content="长征：万水千山 —— 立体长卷，与平面行军共用同一局进度。">
+<title>长征：万水千山 · 立体长卷</title>
 <style>
   :root { --red:#8C3B2E; --warm:#B8AC93; --cool:#4A5A63; --paper:#E6DCC4; --ink:#17150f;
     --paper-2:#e6dcc4; --line:#b3a68a; --river:#4a6f7c; --grass:#4d7a52; --gold:#a5813a; --warn:#7c2f22;
@@ -14,9 +15,11 @@
     font-family:"Songti SC","SimSun",serif; }
   #stage { position:absolute; inset:0; }
   #stage canvas { display:block; width:100%; height:100%; touch-action:none; cursor:grab; }
+  #route-overlay { position:absolute; inset:0; z-index:3; width:100%; height:100%; pointer-events:none; display:none; }
   #cover { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center;
     align-items:center; text-align:center; padding:24px;
-    background:linear-gradient(180deg,#1b2028 0%,#2a2b29 46%,#17150f 100%); }
+    background:radial-gradient(720px 520px at 63% 38%,rgba(181,154,104,.14),transparent 68%),
+      linear-gradient(180deg,#171d23 0%,#272a27 48%,#14130f 100%); }
   .peaks { position:absolute; inset:0; pointer-events:none; opacity:.62; }
   .peaks i { position:absolute; bottom:0; display:block; background:var(--cool); }
   .peaks i:nth-child(1){ left:-6%; width:62%; height:46%; clip-path:polygon(0 100%,36% 12%,70% 74%,100% 100%); background:#3d4a52; }
@@ -24,13 +27,26 @@
   .peaks i:nth-child(3){ left:60%; width:56%; height:38%; clip-path:polygon(0 100%,52% 18%,100% 100%); background:#57636a; }
   .snowcap { position:absolute; inset:0; pointer-events:none; opacity:.5;
     background:radial-gradient(ellipse 30% 9% at 59% 42%, #e6dcc4 0%, transparent 70%); }
-  #cover .inner { position:relative; z-index:2; }
-  h1 { margin:0 0 10px; font-size:34px; font-weight:500; letter-spacing:.34em; }
+  #cover .inner { position:relative; z-index:2; width:min(680px,100%); padding:34px clamp(22px,5vw,52px) 30px;
+    border:1px solid rgba(199,184,152,.24); border-radius:6px;
+    background:linear-gradient(180deg,rgba(20,20,17,.48),rgba(16,16,13,.7));
+    box-shadow:0 28px 80px rgba(0,0,0,.32),inset 0 0 0 1px rgba(255,255,255,.025);
+    backdrop-filter:blur(8px); }
+  .cover-kicker { margin:0 0 12px; font-family:var(--sans); font-size:10px; letter-spacing:3px; color:#bca97f; }
+  h1 { margin:0 0 10px; font-size:clamp(36px,5vw,52px); font-weight:500; letter-spacing:.34em; text-indent:.34em; }
   .sub { font-size:13px; letter-spacing:.24em; color:#b9ae96; margin-bottom:34px; }
   .btn { font-family:inherit; font-size:14px; letter-spacing:.2em; color:var(--paper); cursor:pointer;
     padding:11px 28px; border:1px solid rgba(182,172,147,.5); background:rgba(140,59,46,.26); border-radius:2px; }
   .btn:hover { background:rgba(140,59,46,.6); }
-  .note { margin-top:26px; font-size:11px; line-height:2; color:#8f8776; max-width:540px; }
+  .btn.primary { background:rgba(140,59,46,.86); border-color:#b76b57; color:#fff1da; box-shadow:0 8px 24px rgba(80,25,18,.26); }
+  .btn.primary:hover { background:#a34a39; }
+  .btn.ghost { background:rgba(255,255,255,.035); }
+  .cover-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; }
+  .cover-home { align-self:center; font-family:var(--sans); font-size:11px; letter-spacing:1px; color:#a99f89;
+    text-decoration:none; border-bottom:1px solid rgba(169,159,137,.35); padding-bottom:2px; }
+  .cover-home:hover { color:#eee1c7; }
+  .note { margin:24px auto 0; font-size:11px; line-height:1.95; color:#8f8776; max-width:540px; }
+  .note b { color:#c9b995; font-weight:500; }
   /* 顶/底两条流式带：左·中·右三区用 auto margin 排布，装不下整块换行。
      以前每个控件各自 absolute 钉一个 top/bottom 像素值，窗口一窄就全压在一起。 */
   #ui-top, #ui-bottom { position:absolute; left:16px; right:16px; z-index:6; display:flex;
@@ -43,10 +59,47 @@
   #g3d-nav-slot:empty, #toast:empty { display:none; }
   #hud3d, #legend, #g3d-topbar, #hud, #next-pill, #hand-tray, #comrade-tray, #meta, #err, #g3d-nav {
     pointer-events:auto; }
-  #hud3d { display:none; gap:8px; flex-wrap:wrap; align-items:center; font-size:12px; letter-spacing:.12em; }
+
+  /* ===== 与平面版共用的模式切换 / 顶栏 ===== */
+  .g3d-brandbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+    padding:6px 8px; border:1px solid rgba(182,172,147,.22); border-radius:6px;
+    background:linear-gradient(180deg,rgba(20,19,15,.78),rgba(16,15,12,.66));
+    box-shadow:0 10px 30px rgba(0,0,0,.16); backdrop-filter:blur(7px); }
+  .g3d-brand { display:flex; align-items:center; gap:9px; }
+  .g3d-seal { display:inline-block; padding:3px 6px; color:#f6ecd9; background:#8C3B2E;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.23); font-size:11px; letter-spacing:2px; }
+  .g3d-title { font-size:17px; letter-spacing:4px; color:#f0e6d2; white-space:nowrap; }
+  .g3d-sub { font-family:var(--sans); font-size:10px; letter-spacing:1px; color:#968b77; }
+  .mode-switch { display:flex; align-items:center; gap:2px; padding:2px;
+    border:1px solid rgba(151,137,111,.34); border-radius:999px; background:rgba(5,5,4,.25); }
+  .mode-tab { display:inline-flex; align-items:center; gap:5px; min-height:28px; padding:4px 9px;
+    border:0; border-radius:999px; background:transparent; color:#a99d87; text-decoration:none;
+    font-family:var(--sans); font-size:10.5px; letter-spacing:.7px; cursor:pointer; }
+  .mode-tab i { width:4px; height:4px; border-radius:50%; background:currentColor; opacity:.65; }
+  .mode-tab.active { color:#241812; background:linear-gradient(#f3e8d2,#d8c8aa);
+    box-shadow:0 2px 8px rgba(0,0,0,.26),inset 0 0 0 1px rgba(255,255,255,.38); }
+  .mode-tab.active i { background:#8C3B2E; opacity:1; }
+  button.mode-tab:hover { color:#f2e7d2; background:rgba(255,255,255,.07); }
+  .mode-sync { display:inline-flex; align-items:center; gap:5px; margin:0 3px 0 5px; padding-left:8px;
+    border-left:1px solid rgba(154,140,112,.24); font-family:var(--sans); font-size:9px;
+    letter-spacing:.6px; color:#83a18c; white-space:nowrap; }
+  .mode-sync i { width:4px; height:4px; border-radius:50%; background:#79a987; }
+  .g3d-hub { font-family:var(--sans); font-size:10px; letter-spacing:1px; color:#cdb185;
+    text-decoration:none; border:1px solid rgba(197,161,92,.24); border-radius:3px; padding:5px 8px; }
+  .g3d-hub:hover { color:#fff1d5; background:rgba(197,161,92,.1); }
+
+  #hud3d { display:none; flex-direction:column; gap:6px; align-items:flex-start; font-size:12px; letter-spacing:.12em; }
   #hud3d.on { display:flex; }
   #hud3d button { font-family:inherit; font-size:12px; letter-spacing:.1em; color:var(--paper);
     padding:6px 11px; border:1px solid rgba(182,172,147,.4); background:rgba(20,19,15,.6); cursor:pointer; }
+  .scene-head { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+  .scene-head #btn-tools { color:#f2e7d3; border-color:rgba(197,161,92,.5); background:rgba(140,59,46,.38); }
+  .scene-note { font-family:var(--sans); font-size:9.5px; letter-spacing:.8px; color:#8fa692; padding-left:4px; }
+  .scene-tools { display:none; flex-wrap:wrap; gap:6px; align-items:center; padding:7px;
+    border:1px solid rgba(182,172,147,.22); border-radius:5px; background:rgba(16,16,13,.72);
+    box-shadow:0 12px 30px rgba(0,0,0,.18); }
+  #hud3d.open .scene-tools { display:flex; }
+  #hud { position:fixed; top:84px; right:16px; z-index:7; }
   #legend { display:none; flex-wrap:wrap; gap:4px 12px; max-width:min(560px,80vw);
     font-size:11px; letter-spacing:.08em; padding:8px 10px; background:rgba(20,19,15,.55); border:1px solid rgba(182,172,147,.25); border-radius:4px; }
   #legend.on { display:flex; }
@@ -55,6 +108,11 @@
   #meta { display:none; font-size:11px;
     line-height:1.9; color:#cfc4aa; text-align:left; text-shadow:0 1px 4px #000; }
   #meta.on { display:block; }
+  #place { display:inline-block; padding:5px 10px; border-radius:4px;
+    background:rgba(17,16,13,.62); border:1px solid rgba(182,172,147,.24);
+    color:#e7dcc5; font-weight:500; font-size:12px; letter-spacing:.08em;
+    text-shadow:0 1px 3px #000; backdrop-filter:blur(5px); }
+  #place:empty { display:none; }
   #err { display:none; max-width:min(560px,60vw);
     font-size:12px; line-height:1.8; color:#f4dcd4; background:rgba(90,35,28,.85); padding:10px 14px; border-radius:4px; }
 
@@ -69,7 +127,7 @@
   .g3d-hud .res-bar { flex:1; height:5px; background:rgba(0,0,0,.35); border-radius:3px; overflow:hidden; }
   .g3d-hud .res-bar i { display:block; height:100%; }
 
-  .g3d-topbar { display:flex; gap:6px; flex-wrap:wrap; justify-content:center; margin-inline:auto;
+  .g3d-topbar { display:flex; gap:3px; flex-wrap:wrap; justify-content:flex-end; margin-left:auto;
     max-width:100%; font-family:"Songti SC","SimSun",serif; }
   .g3d-topbar button { font-family:inherit; font-size:12px; letter-spacing:.1em; color:#E6DCC4;
     padding:6px 11px; border:1px solid rgba(182,172,147,.4); background:rgba(20,19,15,.6); cursor:pointer; border-radius:3px; }
@@ -154,7 +212,10 @@
   .modal.cinematic .modal-head h3 { color:#f3e9d6; }
   .modal.cinematic .kicker { color:#d99a86; }
   .modal.cinematic .modal-foot { border-top-color:rgba(200,186,160,.16); }
-  .modal.cinematic .modal-body { text-shadow:0 1px 6px rgba(0,0,0,.7); }
+  /* 只给压在 CG 上的字一层短阴影。原先 6px 的扩大到字缘外，反而像糊了。 */
+  .modal.cinematic .modal-head,
+  .modal.cinematic .modal-body {
+    text-shadow:0 1px 2px rgba(0,0,0,.94), 0 1px 10px rgba(0,0,0,.26); }
   .modal.cinematic .modal-body .cg { color:#f0e6d2; }
   .modal.cinematic .modal-body .cg.big { color:#f6ecd8; }
   .modal.cinematic .modal-body .cg.dim { color:#c9bda6; }
@@ -164,14 +225,64 @@
   .modal.cinematic .modal-body .quote { color:#cdbfa8; border-left-color:#b8a06a; }
   .modal.cinematic .modal-body .delta { background:rgba(200,186,160,.1); color:#e3d7bf; }
   .modal.cinematic .modal-body .name-list li { color:#ecdfc4; }
-  .modal.cinematic .lore { background:rgba(255,255,255,.05); border-color:rgba(200,186,160,.2); }
-  .modal.cinematic .lore-t { color:#d8ccb5; }
-  .modal.cinematic .lore-where, .modal.cinematic .lore-s { color:#a89c86; }
+  .modal.cinematic .lore { background:rgba(7,6,5,.52); border-color:rgba(200,186,160,.28); }
+  .modal.cinematic .lore-t { color:#eee3cd; }
+  .modal.cinematic .lore-where, .modal.cinematic .lore-s { color:#c9bca3; }
+  /* 深色剧情弹窗里，纸面弹窗的深色辅助文字必须转浅；否则在 CG 上会发灰发糊。 */
+  .modal.cinematic .modal-body .notelist { color:#eee2cb; }
+  .modal.cinematic .modal-body .lead { color:#f1e7d4; }
+  .modal.cinematic .modal-body .cg.dim { color:#d8ccb6; }
+  .modal.cinematic .modal-body .costline,
+  .modal.cinematic .modal-body .brief,
+  .modal.cinematic .modal-body .mem,
+  .modal.cinematic .modal-body .dim,
+  .modal.cinematic .modal-body .lore-links,
+  .modal.cinematic .modal-body .wall-head,
+  .modal.cinematic .modal-body .cardbar-tip,
+  .modal.cinematic .modal-body .card-detail p,
+  .modal.cinematic .modal-body .wc-places,
+  .modal.cinematic .modal-body .lockbox p,
+  .modal.cinematic .modal-body .echo { color:#cbbfa6; }
+  .modal.cinematic .modal-body .lore-links a { color:#a9ced8; }
+  .modal.cinematic .modal-body .delta {
+    color:#efe3cd; background:rgba(8,7,6,.44); border-left-color:#bd6a56; }
+  .modal.cinematic .modal-body .note-hint {
+    color:#f0e2c9; background:rgba(140,59,46,.32); border-left-color:#bd6a56; }
+  .modal.cinematic .modal-body .src { color:#c3b69e; }
+  .modal.cinematic .modal-body .quote { color:#e5d9c2; border-left-color:#c2aa72; }
+  .modal.cinematic .modal-body .card-detail,
+  .modal.cinematic .modal-body .wall-card {
+    background:rgba(8,7,6,.46); border-color:rgba(200,186,160,.25); }
+  .modal.cinematic .modal-body .card-detail h4,
+  .modal.cinematic .modal-body .wall-names { color:#efe3cb; }
+  .modal.cinematic .modal-body .card-detail .tag { color:#e5a18d; }
+  .modal.cinematic .modal-body .sin-tag,
+  .modal.cinematic .modal-body .lesson { color:#e8a792; border-color:rgba(232,167,146,.54); }
+  .modal.cinematic .modal-body .lockbox { background:rgba(140,59,46,.20); border-color:rgba(205,120,100,.42); }
+  .modal.cinematic .modal-body .lockbox b { color:#f1b3a2; }
+  .modal.cinematic .modal-body .rule-note {
+    color:#d7d9c9; background:rgba(30,45,32,.48); border:1px solid rgba(142,180,146,.34);
+    padding:8px 12px; border-radius:2px; }
+  .modal.cinematic .modal-body .code-box {
+    color:#ecdfc4; background:rgba(8,7,6,.48); border-color:rgba(200,186,160,.30); }
+  /* 浅色选项卡、道具卡、史料标题不要把上面的阴影再继承进去，否则黑字会发虚。 */
+  .modal.cinematic .modal-body .opt,
+  .modal.cinematic .modal-body .opt *,
+  .modal.cinematic .modal-body .chip,
+  .modal.cinematic .modal-body .chip *,
+  .modal.cinematic .modal-body .lore-top,
+  .modal.cinematic .modal-body .lore-top *,
+  .modal.cinematic .modal-body .code-box { text-shadow:none; }
   .cg-stage { position:absolute; inset:0; overflow:hidden; z-index:0; pointer-events:none; border-radius:8px; }
   .cg-stage.no-art { display:none; }   /* 图没生成或加载失败：只留原来的文字 CG */
   .cg-img { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
   .cg-weather { position:absolute; inset:0; width:100%; height:100%; opacity:.9; }
-  .cg-scrim { position:absolute; inset:0; background:linear-gradient(180deg,rgba(8,7,6,.30),rgba(8,7,6,.74)); }
+  .cg-scrim {
+    position:absolute; inset:0;
+    background:
+      linear-gradient(180deg,rgba(8,7,6,.74) 0%,rgba(8,7,6,.52) 34%,rgba(8,7,6,.64) 72%,rgba(8,7,6,.88) 100%),
+      radial-gradient(120% 80% at 50% 0%,rgba(8,7,6,.26),transparent 62%);
+  }
   .modal-head, .modal-body, .modal-foot { position:relative; z-index:1; }
   @keyframes cg-zoom-in  { from { transform:scale(1.02); } to { transform:scale(1.13); } }
   @keyframes cg-pan-left  { from { transform:scale(1.10) translateX(2.5%); } to { transform:scale(1.10) translateX(-2.5%); } }
@@ -276,68 +387,162 @@
 
   /* 进入 3D 视图前，隐藏全部玩法 UI，避免覆盖封面、拦截“进入 3D 视图”按钮的点击。
      VoxelMap.init 成功后由 JS 给 <body> 加上 .entered，再淡入显示。 */
-  #hud, #hand-tray, #comrade-tray, #g3d-topbar, #next-pill {
+  #hud, #hand-tray, #comrade-tray, #g3d-topbar, #next-pill, .g3d-brandbar {
     opacity:0; visibility:hidden; pointer-events:none; transition:opacity .35s ease; }
   body.entered #hud, body.entered #hand-tray, body.entered #comrade-tray,
-  body.entered #g3d-topbar, body.entered #next-pill { opacity:1; visibility:visible; pointer-events:auto; }
+  body.entered #g3d-topbar, body.entered #next-pill, body.entered .g3d-brandbar {
+    opacity:1; visibility:visible; pointer-events:auto; }
 
   /* 窄屏（断点跟 2D 页一致）：字号与内边距先收紧，让每条带尽量只占一两行 */
   @media (max-width:760px) {
-    #ui-top, #ui-bottom { gap:8px; }
-    #hud3d button, .g3d-topbar button { font-size:11.5px; padding:5px 9px; }
-    .g3d-hud { flex-direction:row; flex-wrap:wrap; }
-    #hud .res { min-width:118px; padding:4px 8px; }
+    /* 窄屏顶带改成三行网格：品牌 / 视图工具 + 功能导航 / 四资源。
+       资源条不再用固定 top 钉住，导航和资源各占一行，互不遮挡。 */
+    #ui-top {
+      top:10px; left:8px; right:8px; gap:6px;
+      display:grid; grid-template-columns:auto minmax(0,1fr);
+      grid-template-areas:
+        "brand brand"
+        "tools hud"
+        "nav nav"
+        "toast toast"
+        "legend legend"
+        "meta meta";
+      align-items:start; flex-wrap:nowrap; overflow:visible;
+    }
+    #ui-top-l { display:contents; }
+    .g3d-brandbar { grid-area:brand; min-width:0; width:100%; }
+    #hud3d { grid-area:tools; min-width:0; }
+    #hud3d, #hud { align-self:start; }
+    #g3d-topbar {
+      grid-area:nav; width:100%; min-width:0; margin-left:0;
+      flex-wrap:nowrap; justify-content:space-between; overflow-x:auto; scrollbar-width:none;
+      padding-right:0; -webkit-mask-image:none; mask-image:none;
+    }
+    #g3d-topbar::-webkit-scrollbar { display:none; }
+    #hud {
+      grid-area:hud; position:static; inset:auto; width:auto; min-width:0;
+      display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
+      gap:4px; padding:5px 6px;
+    }
+    #hud .res { min-width:0; width:auto; gap:5px; padding:4px 6px; }
+    #hud .res-k { font-size:12px; }
+    #hud .res-v { min-width:24px; font-size:14px; }
+    #legend { grid-area:legend; max-width:100%; }
+    #meta { grid-area:meta; }
+    #toast { grid-area:toast; max-width:100%; }
+
+    #hud3d button, .g3d-topbar button { font-size:11px; min-height:34px; padding:5px 8px; }
+    .g3d-topbar button { white-space:nowrap; }
+    .g3d-brandbar { gap:7px; padding:5px 6px; }
+    .g3d-title { font-size:15px; letter-spacing:3px; }
+    .g3d-sub, .mode-sync { display:none; }
+    .mode-tab { min-height:32px; padding:5px 8px; font-size:10.5px; }
+    #place { display:none; }
+    .scene-note { display:none; }
+
+    /* 底部：行进面板与「下一站」并排，手牌/身边人单独一行横向滑。
+       这样 390px 宽也能看到可点的手牌，不用猜整条底栏还能横划。 */
+    #ui-bottom {
+      left:8px; right:8px; bottom:10px; gap:8px;
+      display:grid; grid-template-columns:minmax(0,1fr) auto;
+      grid-template-areas:"nav next" "trays trays";
+      align-items:end; flex-wrap:nowrap; overflow:visible;
+    }
+    #ui-bottom-l { grid-area:nav; min-width:0; width:100%; align-items:stretch; }
+    #g3d-nav-slot { min-width:0; }
+    .g3d-nav { width:100%; max-width:100%; padding:9px 11px; }
+    .g3d-nav .nav-cur { flex-wrap:wrap; gap:5px 8px; font-size:14px; }
+    .g3d-nav .nav-cur b { font-size:16px; }
+    .g3d-nav .nav-cur-tip { display:none; }
+    .g3d-nav .nav-next { margin-top:7px; gap:5px; }
+    #next-pill { grid-area:next; align-self:end; margin:0; padding:8px 13px;
+      font-size:12.5px; white-space:nowrap; }
+    #ui-bottom-r {
+      grid-area:trays; width:100%; display:flex; flex-direction:row;
+      align-items:center; gap:8px; overflow-x:auto; scrollbar-width:none;
+      padding:1px 24px 1px 1px;
+      -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 22px),transparent 100%);
+      mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 22px),transparent 100%);
+    }
+    #ui-bottom-r::-webkit-scrollbar { display:none; }
+    .g3d-tray { max-width:none; flex:0 0 auto; flex-wrap:nowrap; }
+    #hand-tray { order:1; } #comrade-tray { order:2; }
     #meta { font-size:10px; line-height:1.6; }
-    .g3d-nav { max-width:250px; padding:9px 11px; }
     .g3d-next { padding:8px 16px; font-size:13px; }
-    .g3d-tray { max-width:min(280px,54vw); }
-    .g3d-tray .chip { font-size:11.5px; padding:4px 8px; }
-    #legend { max-width:min(520px,74vw); }
+    .g3d-tray .chip { min-height:34px; font-size:11.5px; padding:5px 9px; }
+
+    /* 剧情弹窗窄屏：史料从双栏改单栏，避免 95px 宽的细长字列。 */
+    .lore-list { grid-template-columns:1fr; }
+    .modal-body .name-list { columns:1; }
+    .modal-head { padding:14px 16px 8px; }
+    .modal-head h3 { font-size:19px; }
+    .modal-body { padding:14px 16px 10px; }
+    .modal-foot { padding:10px 16px 16px; }
+    .mbtn { min-height:44px; }
+    .opt { min-height:48px; }
   }
   /* 手机：两条带各收成一行横向滑 —— 宁可划一下，也别把控件摞满整屏、把地图挤没 */
   @media (max-width:430px) {
-    #ui-top, #ui-bottom { flex-wrap:nowrap; overflow-x:auto; touch-action:pan-x;
-      pointer-events:auto; padding-bottom:2px; scrollbar-width:none; }
-    #ui-top::-webkit-scrollbar, #ui-bottom::-webkit-scrollbar { display:none; }
-    #ui-top-l, #ui-bottom-l, #ui-bottom-r, #hud3d, .g3d-topbar, #legend, .g3d-hud, .g3d-tray, .g3d-nav {
-      flex:0 0 auto; flex-wrap:nowrap; }
-    #toast { order:-1; flex:0 0 auto; max-width:100%; }
+    #ui-bottom-l, #ui-bottom-r, .g3d-hud, .g3d-brandbar { flex:0 0 auto; }
+    #ui-bottom { touch-action:pan-x; }
+    #hud .res-bar { display:none; }
+    #hud .res { justify-content:center; }
+    .g3d-nav .nav-go { padding:5px 9px; font-size:12px; }
     #meta { white-space:nowrap; }
   }
 </style>
 </head>
 <body>
 <div id="stage"></div>
+<canvas id="route-overlay" aria-hidden="true"></canvas>
 
 <div id="cover">
   <div class="peaks"><i></i><i></i><i></i></div><div class="snowcap"></div>
   <div class="inner">
+    <p class="cover-kicker">同一局进度 · 随时切换 · 立体长卷</p>
     <h1>万水千山</h1>
     <div class="sub">长征全线 · 立体地图 · 赣南至陕北 · 体素长卷</div>
-    <button class="btn" id="enter">进入 3D 视图</button>
+    <div class="cover-actions">
+      <button class="btn primary" id="enter">进入立体地图</button>
+      <button class="btn ghost" id="cover-to-2d" type="button">切回平面行军</button>
+      <a class="cover-home" href="start.html">返回主入口</a>
+    </div>
     <div class="note">
-      纯原生 WebGL2 · 单文件零依赖 · 双击 file:// 即可运行 · 固定种子程序生成<br>
-      整张平面地图一次立体化：七段地形连成一条红线，沿路有民房、驻扎地、关隘、渡口。<br>
-      默认不创建 WebGL 上下文，点上方按钮才初始化；手机请使用 low 档。<br>
-      进入后相机停在当前位置，点相邻关卡（高亮红圈）即前进一格，也可用「下一站 ▸」按钮。<br>
-      本图已通过 Node 语法检查与接口自检，<b>尚未做 GPU 真机帧率实测</b>。
+      七段地形连成一条红线，沿路是民房、驻扎地、关隘与渡口。<br>
+      进入后相机停在当前部队位置；点金色「下一站」即前进一格。<br>
+      与平面行军共用同一份存档，<b>在游戏顶栏随时切换，进度不丢</b>。
     </div>
   </div>
 </div>
 
 <div id="ui-top">
   <div id="ui-top-l">
-    <div id="hud3d">
-      <button id="btn-view">视角：俯瞰</button>
-      <button id="btn-free">漫游：关</button>
-      <button id="btn-legend">图例</button>
-      <button id="btn-quality">画质：high</button>
-      <button id="btn-pause">暂停</button>
-      <button id="btn-shot">导出画面</button>
-      <button id="btn-exit">退出 3D</button>
-      <select id="sel-region" title="跳到分段" style="font:600 13px/1.1 system-ui,sans-serif;padding:6px 8px;border:1px solid rgba(43,39,33,.3);border-radius:5px;background:rgba(255,255,255,.88);color:#2b2721;cursor:pointer"></select>
+    <div class="g3d-brandbar">
+      <div class="g3d-brand"><span class="g3d-seal">长征</span><span class="g3d-title">万水千山</span><span class="g3d-sub">立体长卷</span></div>
+      <div class="mode-switch" role="group" aria-label="地图模式">
+        <button class="mode-tab" id="switch-to-2d" type="button"><i></i>平面行军</button>
+        <span class="mode-tab active" aria-current="page"><i></i>立体长卷</span>
+        <span class="mode-sync" title="两套地图共用同一份本地存档"><i></i>进度互通</span>
+      </div>
+      <a class="g3d-hub" href="start.html">主入口</a>
     </div>
-    <span id="place" style="color:#2b2721;font-weight:600;text-shadow:0 1px 2px rgba(255,255,255,.55)"></span>
+    <div id="hud3d">
+      <div class="scene-head">
+        <button id="btn-tools" type="button" aria-expanded="false">视图工具</button>
+        <button id="btn-legend">图例</button>
+        <span class="scene-note">视角 / 画质 / 漫游</span>
+      </div>
+      <div class="scene-tools" id="scene-tools">
+        <button id="btn-view">视角：俯瞰</button>
+        <button id="btn-free">漫游：关</button>
+        <button id="btn-quality">画质：high</button>
+        <button id="btn-pause">暂停</button>
+        <button id="btn-shot">导出画面</button>
+        <button id="btn-exit">退出 3D</button>
+        <select id="sel-region" title="跳到分段" style="font:600 13px/1.1 system-ui,sans-serif;padding:6px 8px;border:1px solid rgba(43,39,33,.3);border-radius:5px;background:rgba(255,255,255,.88);color:#2b2721;cursor:pointer"></select>
+      </div>
+    </div>
+    <span id="place"></span>
     <div id="legend"></div>
     <div id="meta"></div>
   </div>
@@ -346,10 +551,10 @@
     <button id="nav-board">木牌</button>
     <button id="nav-wall">名单墙</button>
     <button id="nav-history">史料</button>
-    <button id="nav-cards">卡牌</button>
+    <button id="nav-cards">行囊</button>
     <button id="nav-help">手册</button>
     <button id="nav-memory">记忆</button>
-    <button id="nav-code">存档码</button>
+    <button id="nav-code">存档</button>
     <button id="reset-btn">清空</button>
   </nav>
   <div id="hud" class="g3d-hud"></div>
@@ -390,6 +595,9 @@ const REGION_ORDER = (MAP3D.regions || []).map(r => r.key);
 const $ = s => document.querySelector(s);
 const cover = $('#cover'), stage = $('#stage'), hud = $('#hud3d'),
       legendEl = $('#legend'), meta = $('#meta'), errBox = $('#err'), placeEl = $('#place');
+const routeOverlay = document.getElementById('route-overlay');
+let routeCtx = routeOverlay ? routeOverlay.getContext('2d') : null;
+let routeCssW = 0, routeCssH = 0;
 const err = m => { errBox.style.display = 'block'; errBox.textContent = m; console.error(m); };
 
 /* ---------- 固定种子与噪声 ---------- */
@@ -475,7 +683,7 @@ const WEATHER = {
   /* 川西·夹金山：铅白云幕、白毛风、寒风横雪，远山溶进风雪里 */
   chuan: { top:[.34,.39,.44], hor:[.58,.63,.68], fog:[.56,.61,.66],
            sun:[.70,.78,.88], sky:[.46,.53,.62], light:[.36,.70,.52],
-           fogD:245, sat:.76, exp:.93, cloud:.90, sunPos:[-.20,.50],
+           fogD:300, sat:.80, exp:.88, cloud:.90, sunPos:[-.20,.50],
            snow:1.0, wind:9.0, pcol:[.82,.87,.92] },
   /* 若尔盖草地：低云压着水泊，灰绿苍茫 */
   grass: { top:[.25,.28,.29], hor:[.47,.49,.45], fog:[.50,.53,.50],
@@ -483,9 +691,9 @@ const WEATHER = {
            fogD:360, sat:.82, exp:.97, cloud:.82, sunPos:[-.38,.28],
            snow:0,   wind:3.0, pcol:[.72,.75,.70] },
   /* 甘南·腊子口：冷灰、残雪、险峻 */
-  min:   { top:[.23,.27,.30], hor:[.46,.49,.48], fog:[.50,.53,.52],
+  min:   { top:[.23,.27,.30], hor:[.46,.49,.48], fog:[.46,.50,.53],
            sun:[.74,.78,.82], sky:[.37,.42,.47], light:[.42,.72,.46],
-           fogD:340, sat:.82, exp:.97, cloud:.76, sunPos:[-.34,.34],
+           fogD:380, sat:.86, exp:.93, cloud:.76, sunPos:[-.34,.34],
            snow:.35, wind:4.0, pcol:[.80,.85,.88] },
   /* 陕北·吴起镇：苍劲，云开一线，仍是黄土寒天 */
   shaan: { top:[.33,.37,.43], hor:[.60,.57,.48], fog:[.60,.58,.51],
@@ -526,7 +734,7 @@ function sunDir(p) {
    relief = 起伏幅度；ridge = 山脊锐度；terr = 台地化程度；freq = 主波长倒数。
    数值参照《云山巨城》：世界跨度 ~380 时山高 64~72，即宽高比约 0.2。 */
 const STRATA = [
-  { t:0.050, key:'shaan', alt:26, relief:15, ridge:.30, terr:.90, freq:1/210, main:30, karst:0, gully:5 },
+  { t:0.050, key:'shaan', alt:25, relief:20, ridge:.44, terr:.86, freq:1/190, main:34, karst:0, gully:16 },
   { t:0.130, key:'min',   alt:24, relief:42, ridge:.95, terr:.28, freq:1/185, main:62, karst:2, gully:1 },
   { t:0.220, key:'grass', alt:29, relief: 5, ridge:.30, terr:.15, freq:1/300, main:10, karst:0, gully:0 },
   { t:0.385, key:'chuan', alt:33, relief:52, ridge:1.0, terr:.22, freq:1/200, main:88, karst:3, gully:0 },
@@ -664,7 +872,13 @@ function heightAt(wx, wz) {
      让七段不再是同一个模子刻出来的，且河流/节点高度都从 sampleH 派生，彼此自洽。 */
   if (S.quality === 'high') {
     if (st.karst) { const kp = Math.pow(ridgeN(wx * .045 + 5.5, wz * .045 + 1.9), 3.0); h += st.karst * kp; }
-    if (st.gully) { const rg = ridgeN(wx * .03 + 3.1, wz * .03 - 2.7); const g = 1 - rg; h -= st.gully * g * g; }
+    if (st.gully) {
+      /* 黄土沟壑分两级：宽谷定大形，窄沟切碎塬面。旧版只有一级且幅度太小，
+         远看只剩圆滑沙丘，读不出黄土高原的“塬—梁—峁”。 */
+      const g1 = 1 - ridgeN(wx * .030 + 3.1, wz * .030 - 2.7);
+      const g2 = 1 - ridgeN(wx * .078 - 5.2, wz * .078 + 6.4);
+      h -= st.gully * (g1 * g1 * .78 + g2 * g2 * .22);
+    }
     /* 高频侵蚀纹理：给山坡加细碎沟蚀，让断崖边缘有自然破碎感（仅 high，幅度克制避免阶梯噪点） */
     h += (fbm(wx * .12 + 19, wz * .12 - 7, 4) - .5) * 0.9;
   }
@@ -1129,12 +1343,24 @@ function voxColor(h, slope, wx, wz) {
     const gw = (1 - clamp((h - st.alt) / Math.max(8, treeLine - st.alt), 0, 1)) * 0.16;
     c = mix(c, [.20, .32, .15], gw);
   }
-  /* 雪线以上、且不太陡：覆雪（偏冷的暗白，避免阳光一照就纯白过曝） */
-  if (h > snowLine && slope < .78) c = mix(c, [.72, .78, .83], clamp((h - snowLine) / 9, 0, .95));
+  /* 雪线以上、且不太陡：覆雪。雪色压到冷灰蓝，并按噪声与坡度做出薄雪/露岩斑，
+     不再是一整块纯白高亮面。 */
+  if (h > snowLine && slope < .72) {
+    const sn = fbm(wx * .060 + 17.3, wz * .060 - 11.1, 2);
+    const cover = clamp((h - snowLine) / 13, 0, .92)
+      * clamp((.72 - slope) / .34, 0, 1)
+      * (.60 + .40 * sn);
+    c = mix(c, [.55, .62, .70], cover);
+  }
   /* 雪面裂隙阴影：雪非一片死白，缝隙里有冷蓝凹陷，雪原才有体积 */
-  if (h > snowLine && slope < .60) {
+  if (h > snowLine && slope < .56) {
     const cr = (fbm(wx * .17 + 5, wz * .17 - 2, 2) - .5) * .07;
     c = [clamp(c[0] + cr, 0, 1), clamp(c[1] + cr, 0, 1), clamp(c[2] + cr * .7, 0, 1)];
+  }
+  /* 黄土沟坡露出更深的生土；坡越陡越明显，让沟壑在远看时仍有阴影层次。 */
+  if (st.key === 'shaan' && slope > .24) {
+    const lo = clamp((slope - .24) / .72, 0, 1);
+    c = mix(c, [.46, .34, .22], lo * .34);
   }
   /* 陡坡优先露岩，盖过雪——参考《云山巨城》：只有真实断崖才岩灰。
      岩壁不能是一整块死灰：按高度叠沉积层理 + 分形噪声，深的层压暗，才有山体的"石"感。 */
@@ -1298,7 +1524,8 @@ function buildVoxelChunk(ix, iz, cell) {
     /* 植被密度表驱动：块中心所属地域(VEG_TABLE)决定本块树密度；每块点的具体地域(rk)
        再决定树种与林线/雪线。黄土(shaan) tree 极低→基本裸土；南方林段密；高海拔稀疏。 */
     const v = VEG_TABLE[regionAt(invX(bx + CH * .5), invZ(bz + CH * .5))] || VEG_TABLE.gan;
-    const densMul = [1.0, 0.55, 0.32][lodTier];
+    /* 远档只留少量矮树：远景树太高、太密时会被雾和曝光拉成一地白点。 */
+    const densMul = [1.0, 0.50, 0.22][lodTier];
     const TREE_WORLD = S.quality === 'high' ? 0.0020 : 0.0011;   /* 近距树再密约 11%，仍克制 */
     const cnt = Math.round(CH * CH * TREE_WORLD * v.tree * densMul);
     /* 先定 2~4 个林团中心，树都落在中心附近（高斯散布），形成自然疏密 */
@@ -1331,7 +1558,8 @@ function buildVoxelChunk(ix, iz, cell) {
       else if (rk === 'shaan') ty = rnd() < .6 ? 'shrub' : 'bush';
       else if (rk === 'qian') ty = rnd() < .5 ? 'bush' : (rnd() < .8 ? 'pine' : 'broadleaf');
       else ty = rnd() < .5 ? 'broadleaf' : (rnd() < .8 ? 'poplar' : 'orchard');   /* gan/xiang 暖湿阔叶 */
-      const sc = (alpine ? .7 : 1.0) * (.8 + rnd() * .7);
+      const farSc = lodTier === 2 ? .60 : (lodTier === 1 ? .82 : 1);
+      const sc = (alpine ? .7 : 1.0) * (.8 + rnd() * .7) * farSc;
       vhtree(ty, x, h + .04, z, sc);
       if (lodTier === 0) vhshadow(x, z, sc * 1.5);  /* 仅近距投影 */
     }
@@ -2207,13 +2435,15 @@ function buildMarsh() {
      旧写法把快没过水面的角点压到 h-.30，于是细网格下成千上万个岸线角点各自跟着
      地形起伏，整片又被拽成锡纸褶皱 —— 这正是截图里"出口的水特别乱"的元凶。 */
   vreset();
-  const deep = [.250, .315, .360], shallow = [.330, .390, .430];
+  /* 若尔盖是冷色泥水，不是和草同明度的灰布：加深并向青绿偏一点，
+     让水泊、草洲和四周暖灰草甸在俯瞰时能一眼分开。 */
+  const deep = [.190, .265, .285], shallow = [.280, .355, .365];
   /* 水面永远平贴在 LVL 上、四角取同一水位面 —— 一整片、不重叠、不褶皱。
      地形戳出水面的部分不整格剔除，交给不透明地面的深度遮挡自然盖住（草墩/泥岛因此
      从水里露出来，正是沼泽的样子），绝不会像上一版那样把水一层层滤光成旱地。 */
   /* 水深着色用「模糊地表」LOW 算，整片颜色只随大尺度起伏渐变，不随细碎地形噪点跳色 */
   const tone = (l, lo) => {
-    const t = clamp((l - lo) / 2.4, 0, 1);
+    const t = clamp((l - lo) / 2.8, 0, 1);
     return [lerp(shallow[0], deep[0], t), lerp(shallow[1], deep[1], t), lerp(shallow[2], deep[2], t)];
   };
   for (let j = 0; j < nz - 1; j++) for (let i = 0; i < nx - 1; i++) {
@@ -2790,8 +3020,18 @@ function buildNodeMesh(idx) {
   const sx2 = n.x + Math.cos(rot) * 16 * BS, sz2 = n.z + Math.sin(rot) * 16 * BS;
   const gyS = surfaceY(sx2, sz2) + .06;
   const by = hasR ? Math.max(gyS, wY + 0.35) : gyS;   /* 柱子按自己脚下落地，只有真泡在水里才抬出水面 */
-  vhbox(sx2 - .22 * BS, by, sz2 - .22 * BS, sx2 + .22 * BS, by + 2.4 * BS, sz2 + .22 * BS, [.64, .20, .16], .95);
+  const gateSign = n.kind === 'gate';
+  const postH = (gateSign ? 3.7 : 2.4) * BS;
+  vhbox(sx2 - .22 * BS, by, sz2 - .22 * BS, sx2 + .22 * BS, by + postH, sz2 + .22 * BS, [.64, .20, .16], .95);
   vhbox(sx2 - .55 * BS, by - .2, sz2 - .55 * BS, sx2 + .55 * BS, by + .4, sz2 + .55 * BS, MAT.stoneD, .8);
+  if (gateSign) {
+    /* 大事节点（gate）加一块无字木牌：比统一的小红柱更有地标剪影，
+       也遵守地图规范「节点只用木牌与矮石堆」——不写字、不插旗。 */
+    setXF(sx2, by, sz2, rot + Math.PI / 2);
+    vhbox(-1.15 * BS, postH * .66, -.13 * BS, 1.15 * BS, postH * .78, .13 * BS, [.51, .35, .21], .95);
+    vhbox(-1.15 * BS, postH * .64, -.15 * BS, 1.15 * BS, postH * .66, .15 * BS, [.34, .23, .15], .9);
+    clrXF();
+  }
   RNG = saveR;
   const solid = V.slice(0, VW);
   /* 硝烟单独一份 VBO：半透明、不写深度，跟不透明阵地分开画 */
@@ -2801,12 +3041,12 @@ function buildNodeMesh(idx) {
 }
 
 /* ---------- 红线：分段建带，跟着地形台阶走 ---------- */
-const ROADCOL = [.74, .25, .20];
+const ROADCOL = [.88, .30, .21];
 let RSEGS = [];
 function buildRoute() {
   const SPANP = 24;
   RSEGS = [];
-  const earth = [.56, .42, .29], earthD = [.44, .32, .21];   /* 夯土路肩 / 踩实浅土 */
+  const earth = [.56, .42, .29], earthD = [.42, .30, .20], earthB = [.27, .20, .15];
   for (let s0 = 0; s0 < ROUTE.length - 1; s0 += SPANP) {
     vreset();
     const s1 = Math.min(ROUTE.length - 1, s0 + SPANP);
@@ -2815,14 +3055,27 @@ function buildRoute() {
       const dx = b[0] - a[0], dz = b[1] - a[1], L = Math.hypot(dx, dz) || 1;
       const tx = dx / L, tz = dz / L, nx = -tz, nz = tx;
       const ha = surfaceY(a[0], a[1]) + .30, hb = surfaceY(b[0], b[1]) + .30;
-      const wO = 1.7, wM = 1.0, wI = 0.18;
+      const wB = 2.65, wO = 2.15, wM = 1.25, wI = 0.40;
       /* 外圈深土路肩 → 中间踩实浅土 → 一道红土中心标线：写实土路/栈道质感 */
+      pushQuad([a[0] + nx * wB, ha - .02, a[1] + nz * wB], [b[0] + nx * wB, hb - .02, b[1] + nz * wB],
+               [b[0] - nx * wB, hb - .02, b[1] - nz * wB], [a[0] - nx * wB, ha - .02, a[1] - nz * wB], earthB, [0, 1, 0]);
       pushQuad([a[0] + nx * wO, ha, a[1] + nz * wO], [b[0] + nx * wO, hb, b[1] + nz * wO],
                [b[0] - nx * wO, hb, b[1] - nz * wO], [a[0] - nx * wO, ha, a[1] - nz * wO], earthD, [0, 1, 0]);
       pushQuad([a[0] + nx * wM, ha + .03, a[1] + nz * wM], [b[0] + nx * wM, hb + .03, b[1] + nz * wM],
                [b[0] - nx * wM, hb + .03, b[1] - nz * wM], [a[0] - nx * wM, ha + .03, a[1] - nz * wM], earth, [0, 1, 0]);
       pushQuad([a[0] + nx * wI, ha + .06, a[1] + nz * wI], [b[0] + nx * wI, hb + .06, b[1] + nz * wI],
                [b[0] - nx * wI, hb + .06, b[1] - nz * wI], [a[0] - nx * wI, ha + .06, a[1] - nz * wI], ROADCOL, [0, 1, 0]);
+    }
+    /* 前进箭头：俯瞰缩小时红线只有一两个像素，箭头仍然能说明长征方向。 */
+    if ((s0 / SPANP) % 2 === 0 && ROUTE.length > 3) {
+      const ai = Math.min(ROUTE.length - 2, s0 + 11);
+      const ap = ROUTE[ai], bp = ROUTE[Math.min(ROUTE.length - 1, ai + 2)];
+      let ax = bp[0] - ap[0], az = bp[1] - ap[1]; const al = Math.hypot(ax, az) || 1; ax /= al; az /= al;
+      const anx = -az, anz = ax, ay = surfaceY(ap[0], ap[1]) + .115;
+      const tip = [ap[0] + ax * 1.55, ay, ap[1] + az * 1.55];
+      const lft = [ap[0] - ax * .55 + anx * .92, ay, ap[1] - az * .55 + anz * .92];
+      const rgt = [ap[0] - ax * .55 - anx * .92, ay, ap[1] - az * .55 - anz * .92];
+      pushTri(tip, lft, rgt, ROADCOL, ROADCOL, ROADCOL, [0, 1, 0], [0, 1, 0], [0, 1, 0]);
     }
     RSEGS.push({ x: (ROUTE[s0][0] + ROUTE[s1][0]) / 2, z: (ROUTE[s0][1] + ROUTE[s1][1]) / 2,
       data: V.slice(0, VW), count: vCount, vao: null, vbo: null });
@@ -2892,6 +3145,12 @@ uniform vec3 uCam,uFog,uLightDir,uSunCol,uSkyCol;
 uniform float uFogD,uFogY,uFogH,uCloud,uSat,uExp,uTime;
 uniform vec2 uRes; uniform float uAlpha;
 out vec4 outColor;
+float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float vnoise21(vec2 p){
+  vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  return mix(mix(hash21(i),hash21(i+vec2(1.0,0.0)),f.x),
+             mix(hash21(i+vec2(0.0,1.0)),hash21(i+vec2(1.0,1.0)),f.x),f.y);
+}
 void main(){
   vec3 n=normalize(vNormal);
   vec3 Ld=normalize(uLightDir);
@@ -2909,12 +3168,23 @@ void main(){
   float l=dot(c,vec3(0.299,0.587,0.114));
   c=mix(vec3(l),c,uSat)*uExp;
   float d=length(vWorld-uCam);
+  /* 片元级微表面：顶点色只到 LOD 格距，近看会像塑料。这里叠世界坐标噪声与
+     岩层横纹，远距离自动淡出，既保留低多边形轮廓，又补足草土石颗粒。 */
+  float detailFade=1.0-smoothstep(55.0,260.0,d);
+  float steep=1.0-clamp(n.y,0.0,1.0);
+  float green=smoothstep(0.005,0.16,c.g-c.r);
+  float micro=vnoise21(vWorld.xz*0.62+vWorld.y*0.11)-0.5;
+  float fine=vnoise21(vWorld.xz*2.55-vWorld.y*0.23)-0.5;
+  float band=sin(vWorld.y*1.45+vnoise21(vWorld.xz*0.085)*3.4);
+  c*=1.0+detailFade*(micro*(0.090+0.070*green)+fine*(0.022+0.050*steep)-band*steep*0.045);
   float f=1.0-exp(-pow(d/uFogD,1.55));
   float hf=exp(-max(vWorld.y-uFogY,0.0)/uFogH);
   f=clamp(f+hf*0.18*smoothstep(0.0,uFogD*0.7,d),0.0,0.94);
   c=mix(c,uFog,f);
-  /* 轻度提亮中间调 + 去灰，画面更"精美"不发灰；不改天气配色基调 */
-  c=pow(max(c,0.0),vec3(0.90));
+  /* 高光软压缩：雪坡、水面和云隙不再一过曝就糊成纯白。 */
+  c=max(c,0.0);
+  c=1.0-exp(-c*1.12);
+  c=pow(c,vec3(0.86));
   /* 暗角：把四周压暗，视线聚到队伍要走的那条路上 */
   vec2 uv=gl_FragCoord.xy/uRes;
   float vg=1.0-0.10*pow(length((uv-0.5)*vec2(1.0,0.88))*1.6,2.2);
@@ -2941,7 +3211,7 @@ void main(){
   c*=1.0-amt*cl*0.55;
   c+=vec3(0.045,0.045,0.05)*amt*(1.0-cl)*0.5;
   vec2 dv=(vUV-uSun)*vec2(uAsp,1.0);
-  c+=uSunCol*exp(-pow(length(dv)*2.4,2.0))*0.55*(1.0-amt*0.5*cl);
+  c+=uSunCol*exp(-pow(length(dv)*2.9,2.0))*0.38*(1.0-amt*0.5*cl);
   c=mix(uFog,c,smoothstep(0.0,0.55,y));
   outColor=vec4(c,1.0);
 }`;
@@ -2978,8 +3248,8 @@ void main(){
   /* 顶点波动：水面不是死平面，随流动轻微起伏（流向/折射观感来自此）。
      uCalm=1 是草地死水/沼泽：只留极轻的呼吸 —— 一整片水面被折成锡纸就是这里幅度太大。 */
   float amp=mix(1.0,0.15,uCalm);
-  float w=sin(p.x*0.18+uTime*1.6*uFlow)*0.32+sin(p.z*0.22-uTime*1.3*uFlow)*0.26;
-  w+=sin((p.x+p.z)*0.31+uTime*2.1*uFlow)*0.12;
+  float w=sin(p.x*0.18+uTime*1.6*uFlow)*0.20+sin(p.z*0.22-uTime*1.3*uFlow)*0.15;
+  w+=sin((p.x+p.z)*0.31+uTime*2.1*uFlow)*0.07;
   w*=amp;
   p.y+=w; vRip=w;
   vWorld=p; vCol=aColor;
@@ -2991,6 +3261,12 @@ in vec3 vWorld; in vec3 vCol; in float vRip;
 uniform vec3 uCam,uFog,uSky,uSunDir,uSunCol;
 uniform float uFogD,uTime,uFlow,uAlpha,uCalm;
 out vec4 outColor;
+float hash21(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float vnoise21(vec2 p){
+  vec2 i=floor(p), f=fract(p); f=f*f*(3.0-2.0*f);
+  return mix(mix(hash21(i),hash21(i+vec2(1.0,0.0)),f.x),
+             mix(hash21(i+vec2(0.0,1.0)),hash21(i+vec2(1.0,1.0)),f.x),f.y);
+}
 void main(){
   vec3 V=normalize(uCam-vWorld);
   /* 法线扰动：沿流向拉长的多层波纹（各向异性），水面才有"被风推着走"的流向感。
@@ -2999,7 +3275,11 @@ void main(){
   float a=vWorld.x*0.35+vWorld.z*0.10, b=vWorld.x*0.12-vWorld.z*0.40, c=(vWorld.x+vWorld.z)*0.9;
   float n1=sin(a+uTime*1.7*uFlow), n2=sin(b-uTime*2.4*uFlow), n3=sin(c+uTime*1.1*uFlow);
   float n4=sin((vWorld.x*0.7-vWorld.z*0.5)*2.0+uTime*3.3*uFlow);
-  vec3 N=normalize(vec3(-(n1*0.26+n3*0.40+n4*0.18)*tilt, 1.0, -(n2*0.26-n3*0.40+n4*0.10)*tilt));
+  vec2 q=vWorld.xz;
+  float dn1=vnoise21(q*0.55+vec2(uTime*0.08,-uTime*0.05))-0.5;
+  float dn2=vnoise21(q*1.90-vec2(uTime*0.12,uTime*0.08))-0.5;
+  vec3 N=normalize(vec3(-(n1*0.20+n3*0.30+n4*0.12+dn1*0.30+dn2*0.12)*tilt, 1.0,
+                        -(n2*0.20-n3*0.30+n4*0.07+dn1*0.24-dn2*0.10)*tilt));
   vec3 base=vCol;
   /* 波峰泛白、波谷偏深，水才有体积与流向 */
   base=mix(base, base*1.22, clamp(vRip*0.5+0.5,0.0,1.0)*0.5);
@@ -3008,15 +3288,19 @@ void main(){
   vec3 refl=mix(uSky,uSunCol,0.25);
   /* 阳光高光：水面被太阳斜照出的亮带 */
   vec3 H=normalize(uSunDir+V);
-  float spec=pow(max(dot(N,H),0.0),mix(80.0,150.0,uCalm))*mix(0.6,0.16,uCalm);
+  float spec=pow(max(dot(N,H),0.0),mix(58.0,112.0,uCalm))*mix(0.30,0.07,uCalm);
   /* 流动亮纹：像被风推着走的流光，强化"水在流" */
   float flow=0.5+0.5*sin((vWorld.x*0.5-vWorld.z*0.3)+uTime*3.0*uFlow);
-  vec3 col=mix(base,refl,clamp(fres*mix(1.1,0.5,uCalm),0.0,0.85));
+  vec3 col=mix(base,refl,clamp(fres*mix(0.92,0.34,uCalm),0.0,0.78));
   col+=uSunCol*spec;
-  col+=base*flow*mix(0.08,0.02,uCalm);
+  col+=base*flow*mix(0.05,0.012,uCalm);
+  col*=1.0+(vnoise21(q*0.85+vec2(uTime*0.03,uTime*0.02))-0.5)*0.07;
   float d=length(vWorld-uCam);
   float f=1.0-exp(-pow(d/uFogD,1.55));
   col=mix(col,uFog,clamp(f,0.0,0.95));
+  col=max(col,0.0);
+  col=1.0-exp(-col*1.12);
+  col=pow(col,vec3(0.86));
   outColor=vec4(col,uAlpha);
 }`;
 
@@ -3226,7 +3510,11 @@ function cameraAt(p, ease) {
     /* 机位退回路线后方、抬高俯视——像跟着队伍看前方山谷。
        陡坡段（川西/岷陇）路旁常有几百单位高的山壁：若只沿前进方向取最高点，侧面那道墙会把画面糊死。
        于是在机位前方一个扇形里取样地形最高点（含左右两侧），把机位抬到它上方，再压低视线俯看谷地。 */
-    const back = 76, up = 52;
+    /* 竖屏不能沿用横屏机位：窄画幅里 Vertical FOV 全被天空吃掉，地图挤在底部。
+       这里把机位略抬高、视线多压一点，并把目标高度限制在前方地面附近；用户仍可
+       拖拽抬头看山与天，因为只在向下看时才套用构图上限。 */
+    const portrait = S.canvas.clientHeight > S.canvas.clientWidth * 1.12;
+    const back = portrait ? 86 : 76, up = portrait ? 74 : 52;
     const bx = clamp(p[0] - tx * back, -HALFX + 6, HALFX - 6);
     const bz = clamp(p[1] - tz * back, -HALFZ + 6, HALFZ - 6);
     const nrx = -tz, nrz = tx;                  /* 右向量：横向取样，专门治"旁边的墙" */
@@ -3243,10 +3531,11 @@ function cameraAt(p, ease) {
     const groundAt = sampleH(ax2, az2);
     /* 俯仰改成「视线仰角」：lookPitch>0 抬头看山与天，<0 低头看路。
        旧版 at 永远落在 eye 下方 46，只能往下看 —— 玩家反馈"只能左右转、不能上下看"。 */
-    const elev = clamp(S.lookPitch, -1.0, 1.0) * 0.62;
-    let atY = eyeY + Math.tan(elev) * 56;
+    const elev = clamp(S.lookPitch - (portrait ? .19 : 0), -1.0, 1.0) * 0.62;
+    let atY = eyeY + Math.tan(elev) * (portrait ? 76 : 56);
     if (elev < 0) atY = Math.max(atY, groundAt + 3);
     atY = Math.min(atY, eyeY + 160);
+    if (portrait && elev < 0) atY = Math.min(atY, groundAt + 18);
     const at = [ax2, atY, az2];
     /* 物理兜底：机位/视点永不穿入地形或沉到水面以下（贴地漂移无碰撞数据，用高度钳制保不穿山） */
     const gEye = sampleH(eye[0], eye[2]) + 3.2;
@@ -3263,14 +3552,182 @@ function cameraAt(p, ease) {
     const eye = [fly.x + Math.cos(ang) * R, Hgt, fly.z + Math.sin(ang) * R];
     return { eye, at: [fly.x, fly.r * 0.16, fly.z], region: regionAt(invX(fly.x), invZ(fly.z)) };
   }
-  /* 斜俯视：略高于山头、退到能装下整条长卷，才看得见山形而非一张色板 */
-  const R = WORLD_Y * 0.95;
+  /* 斜俯视：略高于山头、退到能装下整条长卷，才看得见山形而非一张色板。 */
+  const portraitO = S.canvas.clientHeight > S.canvas.clientWidth * 1.12;
+  /* 竖屏时从南向北看，让长轴落在竖直方向；同时退远到整幅地图都进画。
+     横屏仍沿旧机位旋转，保持原来的长卷斜俯视。 */
+  const R = WORLD_Y * (portraitO ? 1.36 : .95);
   /* 俯瞰也要能上下：仰角随 lookPitch 变化（默认 0.52 与旧版等高），
      拉到底可压成近地平线的长卷横视，拉到顶可近乎垂直俯视。 */
-  const elevO = clamp(0.52 - (S.lookPitch + .35) * 0.70, 0.10, 1.34);
-  const ang = Math.sin(S.orbit * 0.5) * 0.16 + S.lookYaw * 0.4;
+  const elevO = clamp((portraitO ? .66 : .52) - (S.lookPitch + .35) * 0.70, 0.10, 1.34);
+  const ang = (portraitO ? Math.PI * .5 : 0) +
+    Math.sin(S.orbit * 0.5) * (portraitO ? .07 : .16) + S.lookYaw * 0.4;
   const eye = [Math.cos(ang) * R * Math.cos(elevO), R * Math.sin(elevO), Math.sin(ang) * R * Math.cos(elevO)];
   return { eye, at: [0, 40, 0], region: regionAt(invX(0), invZ(0)) };
+}
+
+/* ---------- 俯瞰路线覆盖层 ----------
+   3D 红线在整图俯视时只有一两个像素，节点地名也被缩到看不见。这里把同一条
+   ROUTE 投影到屏幕空间的 2D 画布上：深色路基 + 暖红主线 + 前进箭头 + 主要关口
+   地名。只在俯瞰时显示，不参与指针拾取；DPR 单独缩放，390px 竖屏也保持锐利。 */
+const GATE_SHORT = {
+  g1:'于都河', g2:'湘江', g3:'遵义', g4:'一渡赤水', g4b:'二渡赤水', g4c:'四渡赤水',
+  g5:'皎平渡', g6:'彝海', g7:'安顺场', g7b:'泸定桥', g8:'夹金山', g9:'班佑河',
+  g10:'崔古仓', g11:'腊子口', g12:'吴起镇'
+};
+const GATE_PRIO = ['g1','g2','g3','g4c','g5','g7b','g8','g9','g11','g12'];
+let routeShown = false;
+let routeWorld = null;
+
+function syncOverlaySize() {
+  if (!routeOverlay) return;
+  const w = Math.max(1, stage.clientWidth), h = Math.max(1, stage.clientHeight);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const bw = Math.max(1, Math.round(w * dpr)), bh = Math.max(1, Math.round(h * dpr));
+  if (routeOverlay.width !== bw || routeOverlay.height !== bh) {
+    routeOverlay.width = bw; routeOverlay.height = bh;
+  }
+  routeCssW = w; routeCssH = h; routeOverlay._dpr = dpr;
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  const rr = Math.min(r, w * .5, h * .5);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.lineTo(x + w - rr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+  ctx.lineTo(x + w, y + h - rr);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+  ctx.lineTo(x + rr, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+  ctx.lineTo(x, y + rr);
+  ctx.quadraticCurveTo(x, y, x + rr, y);
+  ctx.closePath();
+}
+
+function drawRouteOverlay(over) {
+  if (!routeOverlay || !routeCtx) return;
+  if (!over) {
+    if (routeShown) {
+      routeOverlay.style.display = 'none';
+      routeCtx.setTransform(1, 0, 0, 1, 0, 0);
+      routeCtx.clearRect(0, 0, routeOverlay.width, routeOverlay.height);
+      routeShown = false;
+    }
+    return;
+  }
+  syncOverlaySize();
+  if (!routeShown) { routeOverlay.style.display = 'block'; routeShown = true; }
+
+  const ctx = routeCtx, W = routeCssW, H = routeCssH, dpr = routeOverlay._dpr || 1;
+  const narrow = W <= 760;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, routeOverlay.width, routeOverlay.height);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  /* 路线点：沿 ROUTE 等距抽样，投影到屏幕；相机背面或远出画布时断开笔画。 */
+  if (!routeWorld || routeWorld.length !== ROUTE.length) {
+    routeWorld = ROUTE.map(r => [r[0], r[1], surfaceY(r[0], r[1]) + .75]);
+  }
+  const step = S.quality === 'low' ? 8 : 4, pad = 90, segs = [];
+  let cur = [];
+  for (let i = 0; i < ROUTE.length; i += step) {
+    const r = routeWorld[i];
+    const p = VoxelMap.project(r[0], r[1], r[2]);
+    if (!p || !p.visible || p.x < -pad || p.x > W + pad || p.y < -pad || p.y > H + pad) {
+      if (cur.length > 1) segs.push(cur);
+      cur = []; continue;
+    }
+    cur.push(p);
+  }
+  if (cur.length > 1) segs.push(cur);
+
+  /* 三段叠加：暗色路肩把红线从土黄地表上托起来，中间浅色边和红线本身都很细。 */
+  const scale = narrow ? .84 : 1;
+  const strokes = [[8.2 * scale, 'rgba(20,15,11,.68)'],
+    [5.2 * scale, 'rgba(235,214,171,.84)'], [2.7 * scale, 'rgba(184,50,31,.96)']];
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  for (const [lw, col] of strokes) {
+    ctx.strokeStyle = col; ctx.lineWidth = lw;
+    for (const seg of segs) {
+      ctx.beginPath(); ctx.moveTo(seg[0].x, seg[0].y);
+      for (let i = 1; i < seg.length; i++) ctx.lineTo(seg[i].x, seg[i].y);
+      ctx.stroke();
+    }
+  }
+  ctx.restore();
+
+  /* 前进箭头：按屏幕路程均匀布点，缩到全景也不会丢失方向。 */
+  const gap = narrow ? 118 : 150, size = narrow ? 4.8 : 5.8;
+  let acc = gap * .55;
+  ctx.save();
+  ctx.lineJoin = 'round';
+  for (const seg of segs) for (let i = 1; i < seg.length; i++) {
+    const a = seg[i - 1], b = seg[i];
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy);
+    if (len < .01) continue;
+    acc += len;
+    if (acc < gap) continue;
+    acc = 0;
+    const ux = dx / len, uy = dy / len, px = -uy, py = ux;
+    const x = b.x, y = b.y;
+    ctx.beginPath();
+    ctx.moveTo(x + ux * size, y + uy * size);
+    ctx.lineTo(x - ux * size * .62 + px * size * .68, y - uy * size * .62 + py * size * .68);
+    ctx.lineTo(x - ux * size * .62 - px * size * .68, y - uy * size * .62 - py * size * .68);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(247,226,185,.94)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(45,28,18,.72)'; ctx.lineWidth = 1.1; ctx.stroke();
+  }
+  ctx.restore();
+
+  /* 地名：只标 gate（大事节点）。窄屏显示优先节点，其余经过碰撞检测自动让位。 */
+  const topEl = document.getElementById('ui-top');
+  const botEl = document.getElementById('ui-bottom');
+  const topSafe = topEl ? Math.max(56, topEl.getBoundingClientRect().bottom + 5) : 66;
+  const lowSafe = botEl ? Math.min(H - 44, botEl.getBoundingClientRect().top - 5) : H - 58;
+  const fs = narrow ? 10.5 : 12;
+  const lh = fs + 11, padX = narrow ? 6 : 7, used = [];
+  let gates = NODES3D.filter(n => n.kind === 'gate');
+  if (narrow) gates = gates.filter(n => GATE_PRIO.indexOf(n.id) >= 0);
+  const current = gates.find(n => n.id === S.lastNode);
+  if (current) gates = [current].concat(gates.filter(n => n !== current));
+
+  for (const n of gates) {
+    const p = VoxelMap.project(n.x, n.z, surfaceY(n.x, n.z) + 5.2);
+    if (!p || !p.visible || p.x < 8 || p.x > W - 8 || p.y < 8 || p.y > H - 8) continue;
+    const isCur = n.id === S.lastNode;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, isCur ? (narrow ? 4.4 : 5.2) : (narrow ? 3.3 : 4), 0, 6.2832);
+    ctx.fillStyle = isCur ? 'rgba(226,178,82,.98)' : 'rgba(24,19,14,.88)';
+    ctx.fill();
+    ctx.strokeStyle = isCur ? '#ffe3a2' : 'rgba(231,213,176,.88)';
+    ctx.lineWidth = 1.35; ctx.stroke();
+
+    const name = GATE_SHORT[n.id] || n.name;
+    ctx.font = '600 ' + fs + 'px "PingFang SC","Microsoft YaHei",sans-serif';
+    const tw = ctx.measureText(name).width;
+    let bx = p.x + (narrow ? 7 : 9);
+    if (bx + tw + padX * 2 > W - 6) bx = p.x - tw - padX * 2 - (narrow ? 7 : 9);
+    let by = p.y - lh - 7;
+    if (by < topSafe) by = p.y + 9;
+    if (by + lh > lowSafe) by = p.y - lh - 9;
+    if (by < topSafe || by + lh > lowSafe || bx < 5 || bx + tw + padX * 2 > W - 5) continue;
+    const box = [bx - 2, by - 2, tw + padX * 2 + 4, lh + 4];
+    if (used.some(u => box[0] < u[0] + u[2] && box[0] + box[2] > u[0] &&
+      box[1] < u[1] + u[3] && box[1] + box[3] > u[1])) continue;
+    used.push(box);
+    roundRectPath(ctx, bx, by, tw + padX * 2, lh, 4);
+    ctx.fillStyle = isCur ? 'rgba(63,44,22,.93)' : 'rgba(20,17,13,.82)';
+    ctx.fill();
+    ctx.strokeStyle = isCur ? 'rgba(246,207,122,.82)' : 'rgba(196,164,103,.48)';
+    ctx.lineWidth = 1; ctx.stroke();
+    ctx.fillStyle = isCur ? '#ffe7ad' : '#f2e4c8';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(name, bx + padX, by + lh * .5 + .5);
+  }
 }
 
 function frame(now) {
@@ -3423,7 +3880,7 @@ function frame(now) {
   gl.useProgram(S.pr.main);
   /* 沼泽水面只在草地段上屏，别的地方一个顶点都不画（省负载） */
   if ((over || Math.abs(wtT - .22) < .12)) {
-    if (MARSH.vao) { verts += waterDraw(MARSH, 0.9, 0.22, true, 1.0); }
+    if (MARSH.vao) { verts += waterDraw(MARSH, 0.94, 0.22, true, 1.0); }
     gl.useProgram(S.pr.main);
     if (MARSH_TUFT.vao) { gl.bindVertexArray(MARSH_TUFT.vao); gl.drawArrays(gl.TRIANGLES, 0, MARSH_TUFT.count); verts += MARSH_TUFT.count; }
   }
@@ -3469,6 +3926,8 @@ function frame(now) {
     gl.depthMask(true); gl.disable(gl.BLEND);
   }
   gl.bindVertexArray(null);
+  /* 俯瞰路线/关口的 2D 覆盖层：在 3D 帧之后画，DPR 单独处理，文字不会随 WebGL 分辨率发虚。 */
+  drawRouteOverlay(over && !S.free);
   S.frames++;
   if (now - S.t0 > 1000) {
     S.fps = S.frames; S.frames = 0; S.t0 = now;
@@ -3495,6 +3954,7 @@ function resize() {
   const d = Math.min(window.devicePixelRatio || 1, S.quality === 'low' ? 1.25 : 1.6);
   S.canvas.width = Math.max(1, Math.floor(stage.clientWidth * d));
   S.canvas.height = Math.max(1, Math.floor(stage.clientHeight * d));
+  syncOverlaySize();
 }
 function bindEvents() {
   const c = S.canvas;
@@ -3574,9 +4034,9 @@ const VoxelMap = {
     S.eye = cam0.eye; S.at = cam0.at;
     updateChunks(cam0.eye[0], cam0.eye[2], 400);
     S.raf = requestAnimationFrame(frame);
-    cover.style.display = 'none'; hud.classList.add('on'); meta.classList.add('on');
-    /* 窄屏默认收起图例：那块面板会把顶带再撑高一档、地图被挤没；点「图例」随时能展开 */
-    if (innerWidth > 760) legendEl.classList.add('on');
+    cover.style.display = 'none'; hud.classList.add('on'); meta.classList.remove('on');
+    /* 图例默认收起，把画面让给地图与行军信息；点「图例」随时展开 */
+    legendEl.classList.remove('on');
     document.body.classList.add('entered');
     return true;
   },
@@ -3617,7 +4077,21 @@ const VoxelMap = {
     S.paused = false; S.last = performance.now();
     if (stage) stage.style.opacity = 1; S.raf = requestAnimationFrame(frame);
   },
-  capture() { if (!S.inited || !S.canvas) return null; try { return S.canvas.toDataURL('image/png'); } catch (e) { return null; } },
+  capture() {
+    if (!S.inited || !S.canvas) return null;
+    try {
+      if (routeShown && routeOverlay) {
+        /* 「导出画面」要把 2D 路线/地名一起带走；否则导出的全景会只剩一条细红线。 */
+        const c = document.createElement('canvas');
+        c.width = S.canvas.width; c.height = S.canvas.height;
+        const x = c.getContext('2d');
+        x.drawImage(S.canvas, 0, 0);
+        x.drawImage(routeOverlay, 0, 0, c.width, c.height);
+        return c.toDataURL('image/png');
+      }
+      return S.canvas.toDataURL('image/png');
+    } catch (e) { return null; }
+  },
   dispose() {
     if (S.raf) cancelAnimationFrame(S.raf); S.raf = 0;
     S.cleanups.forEach(fn => fn()); S.cleanups = [];
@@ -3644,6 +4118,8 @@ const VoxelMap = {
     }
     if (S.canvas && S.canvas.parentNode) S.canvas.parentNode.removeChild(S.canvas);
     S.canvas = null; S.gl = null; S.inited = false; S.paused = false; S.lastNode = null;
+    if (routeOverlay) routeOverlay.style.display = 'none';
+    routeShown = false;
     S.listeners = {}; S.tween = null; S.intro = 0; S.lookYaw = 0; S.fly = null; S.flyName = '长征全线';
     cover.style.display = 'flex'; hud.classList.remove('on'); legendEl.classList.remove('on'); meta.classList.remove('on');
     placeEl.textContent = ''; errBox.style.display = 'none';
@@ -3657,6 +4133,22 @@ const VoxelMap = {
   }
 };
 window.VoxelMap = VoxelMap;
+
+/* 统一启动口：先建 WebGL 场景，再把 3D 玩法引擎挂上去。
+   放在页面末尾的脚本里调用，确保 data.js / game3d.js 已经加载。 */
+window.CWQS_START_3D = function (quality) {
+  if (VoxelMap.state && VoxelMap.state.inited) return true;
+  const q = quality || (innerWidth <= 760 ? 'low' : 'high');
+  if (!VoxelMap.init({ mount: stage, quality: q })) return false;
+  const bq = document.getElementById('btn-quality'); if (bq) bq.textContent = '画质：' + q;
+  if (window.Game3D) {
+    Game3D.setNodes(NODES3D.map(n => ({ id:n.id, name:n.name, x:n.x, z:n.z, h:sampleH(n.x, n.z) })));
+    Game3D.init(VoxelMap);
+    if (Game3D.flyCurrent) Game3D.flyCurrent();
+  }
+  try { localStorage.setItem('cwqs_mode_v1', '3d'); } catch (e) {}
+  return true;
+};
 
 /* 跳到某分段：相机飞到该 region 中心，缩近到其范围 */
 function flyTo(key) {
@@ -3689,14 +4181,41 @@ if (selRegion) {
     row.appendChild(sw); row.appendChild(tx); legendEl.appendChild(row);
   }
 })();
-$('#enter').addEventListener('click', () => {
-  if (!VoxelMap.init({ mount: stage, quality: 'high' })) return;
-  if (window.Game3D) { Game3D.setNodes(NODES3D.map(n => ({ id:n.id, name:n.name, x:n.x, z:n.z, h:sampleH(n.x, n.z) }))); Game3D.init(VoxelMap); }
+$('#enter').addEventListener('click', () => window.CWQS_START_3D());
+
+function save3dNow() {
+  try { if (window.Game3D_Engine && Game3D_Engine.Store) Game3D_Engine.Store.save(); } catch (e) {}
+}
+function go2D() {
+  save3dNow();
+  var at = null;
+  try {
+    if (window.Game3D_Engine && Game3D_Engine.Store && Game3D_Engine.Store.s) at = Game3D_Engine.Store.s.at;
+    if (!at) {
+      var raw = localStorage.getItem('cwqs_save_v1');
+      at = raw ? (JSON.parse(raw) || {}).at : null;
+    }
+  } catch (e) {}
+  try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
+  location.href = 'index.html?v=36&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+}
+var switch2d = document.getElementById('switch-to-2d');
+var cover2d = document.getElementById('cover-to-2d');
+if (switch2d) switch2d.addEventListener('click', go2D);
+if (cover2d) cover2d.addEventListener('click', go2D);
+
+var toolsBtn = document.getElementById('btn-tools');
+if (toolsBtn) toolsBtn.addEventListener('click', () => {
+  var box = document.getElementById('hud3d');
+  if (!box) return;
+  var open = box.classList.toggle('open');
+  toolsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
 });
 $('#btn-view').addEventListener('click', e => {
   S.viewMode = S.viewMode === 'near' ? 'overview' : 'near';
   e.currentTarget.textContent = '视角：' + (S.viewMode === 'near' ? '近景' : '俯瞰');
   S.intro = 0;
+  if (S.viewMode === 'near') drawRouteOverlay(false);
 });
 $('#btn-free').addEventListener('click', e => {
   S.free = !S.free;
@@ -3743,11 +4262,28 @@ if (typeof location !== 'undefined') {
   }
   const mNode = /[?&]node=([A-Za-z0-9_]+)/.exec(Q);
   if (mNode) { const nn = NODES3D.find(x => x.id === mNode[1]); if (nn) { let bu = 0, bd = 1e9; ROUTE.forEach((r, k) => { const d = Math.hypot(r[0] - nn.x, r[1] - nn.z); if (d < bd) { bd = d; bu = k / (ROUTE.length - 1); } }); S.uPos = bu; S.tween = null; } }
-  if (/[?&]auto=1/.test(Q) && VoxelMap.init({ mount: stage, quality: 'high' })) { if (window.Game3D) { Game3D.setNodes(NODES3D.map(n => ({ id:n.id, name:n.name, x:n.x, z:n.z, h:sampleH(n.x, n.z) }))); Game3D.init(VoxelMap); } }
+  /* 自动进入放在 game3d.js 加载之后，见页面末尾的启动脚本 */
 }
 })();
 </script>
-<script src="data.js?v=34"></script>
-<script src="game3d.js?v=34"></script>
+<script src="data.js?v=36"></script>
+<script src="game3d.js?v=36"></script>
+<script>
+(function () {
+  var Q = location.search;
+  if (!/[?&](play|auto)=1/.test(Q)) return;
+  function start() {
+    if (!window.CWQS_START_3D) return;
+    window.CWQS_START_3D();
+    if (/[?&]from=(2d|start)/.test(Q)) {
+      setTimeout(function () {
+        try { if (window.Game3D_Engine) Game3D_Engine.Toast.show('已同步进度 · 立体长卷'); } catch (e) {}
+      }, 700);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start);
+  else start();
+})();
+</script>
 </body>
 </html>

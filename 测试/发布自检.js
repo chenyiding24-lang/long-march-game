@@ -16,11 +16,11 @@ const pass = m => ok.push(m);
 const fail = m => bad.push(m);
 
 /* ---------- 1. 站点清单 ---------- */
-const MUST = ['index.html', 'style.css', 'data.js', 'game.js', 'favicon.svg'];
+const MUST = ['start.html', 'index.html', 'style.css', 'data.js', 'game.js', 'game3d.js', 'route3d.html', 'favicon.svg'];
 /* route3d.html = 体素路线长卷（独立单文件、零外链），顶栏「3D 路线长卷」直接链过去
    game3d.js = 3D 版事件/关卡引擎，route3d.html 用它跑玩法；与 2D game.js 是两套结算，
                发布时两个都要发，但改玩法时记得两边都改。 */
-const EXTRA_OK = new Set([...MUST, 'route3d.html', 'game3d.js']);
+const EXTRA_OK = new Set(MUST);
 if (!fs.existsSync(SITE)) fail('找不到站点根目录：' + SITE);
 else {
   const files = fs.readdirSync(SITE).filter(f => fs.statSync(path.join(SITE, f)).isFile());
@@ -33,8 +33,8 @@ else {
 const read = f => path.join(SITE, f);
 const src = name => { try { return fs.readFileSync(read(name), 'utf8'); } catch (e) { return ''; } };
 const html = src('index.html'), css = src('style.css'), data = src('data.js'), js = src('game.js');
-const js3d = src('game3d.js'), r3d = src('route3d.html');
-const ALL = { 'index.html': html, 'style.css': css, 'data.js': data, 'game.js': js, 'game3d.js': js3d, 'route3d.html': r3d };
+const js3d = src('game3d.js'), r3d = src('route3d.html'), start = src('start.html');
+const ALL = { 'index.html': html, 'style.css': css, 'data.js': data, 'game.js': js, 'game3d.js': js3d, 'route3d.html': r3d, 'start.html': start };
 
 /* ---------- 2. 零外链：不许有 CDN / 远程字体 / 网络请求 ---------- */
 /* www.w3.org/2000/svg 是 SVG 命名空间声明，不是请求，白名单 */
@@ -126,7 +126,7 @@ console.log('单站总体积：' + MUST.map(size).join(' + ') + '\n');
 ok.forEach(m => console.log('  [OK]   ' + m));
 if (bad.length) { console.log('\n=== 必须处理 ===\n' + bad.map(b => '  [FAIL] ' + b).join('\n')); }
 else console.log('\n结论：可直接作为静态站发布 —— 把 游戏/ 里的 ' + EXTRA_OK.size + ' 个文件当网站根目录，' +
-  'index.html 即首页；不需要 npm install、不需要构建、不需要后端。');
+  'start.html 即首页；不需要 npm install、不需要构建、不需要后端。');
 console.log('\n发布后请人工确认（脚本管不了的两件事）：');
 console.log('  1) 手机上竖屏 / 横屏各打一格的观感（样式做了 760px / 430px / hover:none 三档）；');
 console.log('  2) 网址换了 origin，localStorage 是新的 —— 本机 file:// 的旧进度不会出现在线上，这是预期。');

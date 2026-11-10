@@ -4,32 +4,40 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#26231f">
-<meta name="description" content="长征：万水千山 —— 统帅视角的文字游戏，二万五千里路线示意图 + 四资源抉择。">
-<title>长征：万水千山 · v1 初版</title>
-<link rel="icon" href="favicon.svg?v=34" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=34">
+<meta name="description" content="长征：万水千山 —— 平面行军图，与立体长卷共用同一局进度。">
+<title>长征：万水千山 · 平面行军</title>
+<link rel="icon" href="favicon.svg?v=36" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=36">
 </head>
 <body>
 <a class="skip" href="#viewport">跳到地图</a>
 <div id="app">
 
-  <!-- 顶栏：链接式导航，不做下拉菜单 -->
+  <!-- 顶栏：地图模式与功能分区，窄屏自动换行 -->
   <header id="topbar">
     <div class="brand">
       <span class="brand-seal">长征</span>
-      <h1>万水千山</h1>
-      <span class="brand-sub">v1 初版 · 统帅视角 · 路线示意图</span>
+      <div class="brand-copy">
+        <h1>万水千山</h1>
+        <span class="brand-sub">平面行军 · 统帅视角 · 二万五千里</span>
+      </div>
     </div>
-    <nav id="topnav">
-      <button class="navlink" id="nav-cards">手法卡与道具</button>
+    <div class="mode-switch" role="group" aria-label="地图模式">
+      <span class="mode-tab active" aria-current="page"><i></i>平面行军</span>
+      <button class="mode-tab" id="switch-to-3d" type="button"><i></i>立体长卷</button>
+      <span class="mode-sync" title="两套地图共用同一份本地存档"><i></i>进度互通</span>
+    </div>
+    <nav id="topnav" aria-label="游戏功能">
+      <button class="navlink" id="nav-cards">行囊</button>
       <button class="navlink" id="nav-board">木牌</button>
       <button class="navlink" id="nav-wall">名单墙</button>
-      <button class="navlink" id="nav-history">史料与出处</button>
-      <button class="navlink" id="nav-help">规则手册</button>
-      <button class="navlink" id="nav-memory">战友记忆</button>
-      <button class="navlink" id="nav-code">存档码</button>
-      <a class="navlink nav-3d" href="route3d.html?v=34" target="_blank" rel="noopener">3D 路线长卷</a>
-      <button class="navlink dim" id="reset-btn">清空存档</button>
+      <button class="navlink" id="nav-history">史料</button>
+      <button class="navlink" id="nav-help">手册</button>
+      <button class="navlink" id="nav-memory">记忆</button>
+      <span class="nav-divider" aria-hidden="true"></span>
+      <button class="navlink util" id="nav-code">存档</button>
+      <button class="navlink dim" id="reset-btn">清空</button>
+      <a class="navlink home" href="start.html">主入口</a>
     </nav>
   </header>
 
@@ -80,21 +88,34 @@
   </footer>
 </div>
 
-<script src="data.js?v=34"></script>
-<script src="game.js?v=34"></script>
+<script src="data.js?v=36"></script>
+<script src="game.js?v=36"></script>
 <script>
-/* 2D → 3D 相容入口：点"3D 路线长卷"时带上当前所在节点，3D 里直接落到该事件地标。
-   两个模式共用同一份节点 id（s.at），因此 3D 的地标就是 2D 事件的伏笔现场。 */
+/* 平面 → 立体：先把当前状态落盘，再带着所在节点跳到 3D。
+   两套地图共用 cwqs_save_v1，回来后也从同一节点继续。 */
 document.addEventListener('DOMContentLoaded', function () {
-  var a = document.querySelector('.navlink.nav-3d');
-  if (!a) return;
-  a.addEventListener('click', function () {
+  var btn = document.getElementById('switch-to-3d');
+  function saveNow() {
+    try { if (window.Game && Game.debug && Game.debug.Store) Game.debug.Store.save(); } catch (e) {}
+  }
+  function go3d() {
+    saveNow();
+    try { localStorage.setItem('cwqs_mode_v1', '3d'); } catch (e) {}
+    var at = null;
     try {
       var raw = localStorage.getItem('cwqs_save_v1');
-      var at = raw ? (JSON.parse(raw) || {}).at : null;
-      if (at) a.href = 'route3d.html?v=34&node=' + encodeURIComponent(at);
-    } catch (e) { /* 无档时就用默认全景 */ }
-  });
+      at = raw ? (JSON.parse(raw) || {}).at : null;
+    } catch (e) {}
+    location.href = 'route3d.html?v=36&play=1&from=2d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  }
+  if (btn) btn.addEventListener('click', go3d);
+
+  /* 从 3D 切回来时给一条明确的到达反馈。 */
+  if (/[?&]from=3d/.test(location.search)) {
+    setTimeout(function () {
+      try { if (window.Game && Game.debug && Game.debug.Toast) Game.debug.Toast.show('已同步立体长卷进度 · 平面行军'); } catch (e) {}
+    }, 700);
+  }
 });
 </script>
 </body>
