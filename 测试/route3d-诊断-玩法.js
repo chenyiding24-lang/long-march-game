@@ -88,6 +88,21 @@ ok('g1 有可达邻格', ns.length > 0, ns.map(n => n.id).join(','));
 /* ---------- 5. 逐节点结算：无异常 + 资源不越界 ---------- */
 const fresh = () => { Store.s = JSON.parse(JSON.stringify(Store.defaultState()));
   Store.meta = JSON.parse(JSON.stringify(Store.defaultMeta())); Game.chosenCard = null; };
+
+/* ---------- 4b. 跳过一条分支后，指引不能把玩家送回上一格 ---------- */
+const flatEdges = EDGES.filter(([a, b]) => NODE_MAP[a].y === NODE_MAP[b].y);
+ok('路线前后关系可由 y 判定', flatEdges.length === 0,
+   flatEdges.map(([a, b]) => a + '-' + b).join(','));
+fresh();
+Store.s.done = { g1: true, e_y2: true };
+Store.s.at = 'h_w1';
+const nsSkip = Game.nextNodes().map(n => n.id);
+ok('跳过 e_y1 后，从合流点不推荐回头', !nsSkip.includes('e_y1') &&
+   (nsSkip.includes('e_s1') || nsSkip.includes('e_s2')), nsSkip.join(','));
+Store.s.at = 'e_y1'; Store.s.done.h_w1 = true;
+const nsBack = Game.nextNodes().map(n => n.id);
+ok('回到漏掉的分支后，下一站仍指向前方', nsBack[0] === 'h_w1', nsBack.join(','));
+
 let settleCount = 0, settleFails = 0;
 for (const node of NODES) {
   fresh();

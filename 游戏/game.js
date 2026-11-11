@@ -804,18 +804,20 @@ const MapView = {
   },
 
   /* 脚下这一步真能踩下去的去向：相邻 + 已探明 + 没被锁。
+     只推前进方向（路线节点 y 单调减小）；走到尽头/支线末端才允许回退。
      先没走过的（别把玩家推荐回已经打完的来路），都没走过再大关卡优先，最后就近；
      都已走过（死路/叶子）则纯就近回退，不跳回起点关卡。 */
   frontNodes() {
     const s = Store.s, cur = NODE_BY_ID[s.at];
     if (!cur) return [];
     const d = n => this.dist(cur, n);
-    return [...(ADJ[s.at] || new Set())]
+    const all = [...(ADJ[s.at] || new Set())]
       .map(id => NODE_BY_ID[id])
       .filter(n => n && n.id !== s.at && this.visible(n)
         && !(n.lockedUntil && !s.done[n.lockedUntil])
-        && !(n.hiddenUntilWin && !(Store.meta.wins > 0)))
-      .sort((a, b) => {
+        && !(n.hiddenUntilWin && !(Store.meta.wins > 0)));
+    const forward = all.filter(n => n.y < cur.y);
+    return (forward.length ? forward : all).sort((a, b) => {
         const da = s.done[a.id] ? 1 : 0, db = s.done[b.id] ? 1 : 0;   /* 先没走过的 */
         if (da !== db) return da - db;
         if (!da) {                                                    /* 都没走过：大关卡优先 */

@@ -25,7 +25,8 @@ node_modules/
 测试/_shots/
 测试/_corners/
 # CDP 跑测每次生成的 Chrome 临时 profile（成千上万个缓存文件，绝不入库）
-测试/.chrome-tmp-*/
+# 有无后缀都要挡：不同跑测脚本用了 .chrome-tmp / .chrome-tmp-<pid> / .chrome-tmp-2d 等命名
+测试/.chrome-tmp*/
 测试/_聚落_exp.js
 游戏-*.png
 

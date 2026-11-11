@@ -375,7 +375,8 @@
       return true;
     },
     /* 脚下这一步真能踩下去的去向：相邻 + 已探明 + 没被锁。
-       与 2D frontNodes 同序，但修正了“死路跳回起点”的毛病：
+       路线节点的 y 沿长征方向单调减小；只推前进方向，避免跳过分支后又把玩家指回上一格。
+       只有走到尽头/支线末端才允许回退。与 2D frontNodes 同序：
          1) 先没走过的（绝不推荐已经打完的来路 —— 这是“下一站变回上一站”的根因）；
          2) 都没走过：大关卡优先（引导主线），再就近；
          3) 都已走过（走到死路/叶子）：纯就近回退，不跳回起点关卡。
@@ -385,9 +386,10 @@
       if (!cur) return [];
       const d2 = n => this.dist2(cur, n);
       const adj = ADJ[s.at] || new Set();   /* ADJ 的值是 Set（与 2D 一致），先展开成数组再排序 */
-      return [...adj].map(id => NODE_MAP[id])
-        .filter(n => n && n.id !== s.at && this.reachable(n.id))
-        .sort((a, b) => {
+      const all = [...adj].map(id => NODE_MAP[id])
+        .filter(n => n && n.id !== s.at && this.reachable(n.id));
+      const forward = all.filter(n => n.y < cur.y);
+      return (forward.length ? forward : all).sort((a, b) => {
           const da = s.done[a.id] ? 1 : 0, db = s.done[b.id] ? 1 : 0;   /* 先没走过的 */
           if (da !== db) return da - db;
           if (!da) {                                                        /* 都没走过：大关卡优先 */

@@ -1835,18 +1835,21 @@ function vhroof(w, d, L, rise, col, opt) {
   opt = opt || {}; const eave = opt.eave === undefined ? (w + d) / 2 * 0.2 : opt.eave, baseY = opt.y || 0;
   const w0 = w / 2 + eave, d0 = d / 2 + eave;
   const innW = Math.max(.6, w0 - L * (w0 * .12)), innD = Math.max(.6, d0 - L * (d0 * .12));
-  const lipC = col.map(v => v * .58);
+  /* 瓦口唇边别做太黑太厚：它是一两像素宽的高频细带，又压在上一层坡面上，
+     深度相近时相机一动就明暗交替（视频里「墙在闪」的一大半来自这里）。
+     颜色拉近瓦色、高度收窄，层叠的轮廓还在，跳变幅度却小得多。 */
+  const lipC = col.map(v => v * .82);
   for (let k = 0; k < L; k++) {
     const f0 = k / L, f1 = (k + 1) / L;
     const a = lerp(w0, innW, f0), b = lerp(w0, innW, f1), c = lerp(d0, innD, f0), e = lerp(d0, innD, f1);
     const y0 = baseY + k * rise, y1 = baseY + (k + 1) * rise;
-    const cA = col.map(v => v * .98), cB = col.map(v => v * .84);
+    const cA = col.map(v => v * .98), cB = col.map(v => v * .92);
     vhquad([-a, y0, -c], [a, y0, -c], [b, y1, -e], [-b, y1, -e], cA, 1, [0, 1, -.4]);
     vhquad([a, y0, c], [-a, y0, c], [-b, y1, e], [b, y1, e], cA, 1, [0, 1, .4]);
     vhquad([-a, y0, c], [-a, y0, -c], [-b, y1, -e], [-b, y1, e], cB, 1, [-.4, 1, 0]);
     vhquad([a, y0, -c], [a, y0, c], [b, y1, e], [b, y1, -c], cB, 1, [.4, 1, 0]);
     /* 每层瓦口：外沿一圈竖带，形成层叠椽头，也顺手把纸面边缘做实 */
-    const lip = .30;
+    const lip = .18;
     vhquad([-a, y0 - lip, -c], [a, y0 - lip, -c], [a, y0, -c], [-a, y0, -c], lipC, 1, [0, 0, -1]);
     vhquad([a, y0 - lip, c], [-a, y0 - lip, c], [-a, y0, c], [a, y0, c], lipC, 1, [0, 0, 1]);
     vhquad([-a, y0 - lip, c], [-a, y0 - lip, -c], [-a, y0, -c], [-a, y0, c], lipC, 1, [-1, 0, 0]);
@@ -1876,31 +1879,38 @@ function pickHouseStyle(x, z, town) {
   if (town && RNG() < .45) return 'tile';
   return mix[RNG() * mix.length | 0];
 }
-/* 茅草顶：一层层外扩的草垛 + 垂下来的参差草穗，轮廓蓬松，不是一块斜板 */
+/* 茅草顶：一层层外扩的草垛 + 少量垂下来的草穗，轮廓蓬松，不是一块斜板。
+   旧版每层撒 10 根 .44 宽的小草穗、层色随机幅度 .22 —— 这些亚像素小方块
+   在相机移动时成片地明灭，是层叠草顶「闪」的主因。现在每层 3 根、加粗、
+   层色差收窄，蓬松感保留，高频噪点少一大半。 */
 function vhthatch(w, d, y0, rise) {
   const L = 4, eave = w * .24;
   for (let k = 0; k < L; k++) {
     const f = k / L;
     const ww = w / 2 + eave - f * w * .17, dd = d / 2 + eave * .8 - f * d * .15;
-    const y = y0 + f * rise, g = .86 + .22 * RNG();
+    const y = y0 + f * rise, g = .92 + .12 * RNG();
     const col = [.62 * g, .53 * g, .31 * g];
     vhbox(-ww, y, -dd, ww, y + rise / L * 1.22, dd, col, .95);
-    for (let s = -2; s <= 2; s++) {
-      const px = s / 2 * ww * .78, len = .28 + RNG() * .5;
-      const cc = col.map(v => v * .78);
-      vhbox(px - .22, y - len, -dd - .08, px + .22, y + .1, -dd + .12, cc, .9);
-      vhbox(px - .22, y - len, dd - .12, px + .22, y + .1, dd + .08, cc, .9);
+    for (let s = -1; s <= 1; s++) {
+      const px = s * ww * .55, len = .28 + RNG() * .4;
+      const cc = col.map(v => v * .86);
+      vhbox(px - .34, y - len, -dd - .08, px + .34, y + .1, -dd + .12, cc, .9);
+      vhbox(px - .34, y - len, dd - .12, px + .34, y + .1, dd + .08, cc, .9);
     }
   }
   vhbox(-.35, y0 + rise, -d * .22, .35, y0 + rise + .45, d * .22, [.58, .49, .28], .9);
 }
-/* 石板顶：薄石片错落叠压（黔北、山地的做法） */
+/* 石板顶：石阶错落叠压（黔北、山地的做法）。
+   旧版三层只厚 .34、间隔 .82，片与片之间留着一条 1~2 像素的透空缝，
+   相机一移动缝里就一会儿是石板、一会儿是背景，远看整片墙在闪。
+   现在每层厚 .90 > 间距 .82，层间互相压住、不留透空缝，仍是逐级收窄的石阶，
+   但再细的动作也不会把细缝闪出来。 */
 function vhslate(w, d, y0) {
   const L = 3, eave = w * .17;
   for (let k = 0; k < L; k++) {
     const f = k / L, ww = w / 2 + eave - f * w * .14, dd = d / 2 + eave - f * d * .14;
     const c = [.36 + .07 * RNG(), .39 + .05 * RNG(), .40 + .05 * RNG()];
-    vhbox(-ww, y0 + f * .82, -dd, ww, y0 + f * .82 + .34, dd, c, .95);
+    vhbox(-ww, y0 + f * .82, -dd, ww, y0 + f * .82 + .90, dd, c, .95);
   }
 }
 /* 门窗：矮门 + 小窗洞，草房/木屋用暗色，瓦房留一点暖光。
@@ -1960,52 +1970,54 @@ function vhhouse(o) {
     for (const sx of [-1, 1]) for (const sz of [-1, 1])
       vhbox(sx * w * .38 - .15, -2.1, sz * d * .38 - .15, sx * w * .38 + .15, 0, sz * d * .38 + .15, MAT.woodD, .9);
     vhbox(-w / 2 - .3, -.2, -d / 2 - .3, w / 2 + .3, .12, d / 2 + .3, [.44, .32, .22], .9);
-    vhbox(-w / 2 - .3, .12, d / 2 + .08, w / 2 + .3, .72, d / 2 + .34, [.40, .29, .20], .9);
-    vhbox(-w / 2, .12, -d / 2, w / 2, H * .85, d / 2, [.52, .38, .25], .95);
+    vhbox(-w / 2 - .3, 0, d / 2 + .08, w / 2 + .3, .72, d / 2 + .34, [.40, .29, .20], .9);
+    vhbox(-w / 2, 0, -d / 2, w / 2, H * .85, d / 2, [.52, .38, .25], .95);
     vhopenings(w, d, H * .85, true);
     vhthatch(w, d, H * .85, 1.25);
   } else if (style === 'ruin') {             /* 战火后的残屋：墙高低不齐、梁焦黑、顶塌半边 */
     const c = [.46, .40, .33];
-    vhbox(-w / 2, 0, -d / 2, -w / 2 + .55, H * 1.05, d / 2, c, .9);
-    vhbox(w / 2 - .55, 0, -d / 2, w / 2, H * .62, d / 2, c, .9);
-    vhbox(-w / 2 + .55, 0, -d / 2, w / 2 - .55, H * .48, -d / 2 + .5, c, .9);
-    vhbox(-w / 2 + .55, 0, d / 2 - .5, w / 2 - .55, H * .78, d / 2, c, .9);
+    vhbox(-w / 2, -.12, -d / 2, -w / 2 + .55, H * 1.05, d / 2, c, .9);
+    vhbox(w / 2 - .55, -.12, -d / 2, w / 2, H * .62, d / 2, c, .9);
+    vhbox(-w / 2 + .55, -.12, -d / 2, w / 2 - .55, H * .48, -d / 2 + .5, c, .9);
+    vhbox(-w / 2 + .55, -.12, d / 2 - .5, w / 2 - .55, H * .78, d / 2, c, .9);
     vhbox(-w * .35, H * .78, -d * .2, w * .35, H * .82, d * .1, [.20, .15, .12], .9);
     vhbox(-w * .28, H * .82, -d * .16, w * .1, H * .86, d * .06, [.24, .18, .14], .9);
   } else if (style === 'adobe') {            /* 土坯平顶：厚墙 + 平屋面 + 女儿墙 */
     const c = [.68, .56, .39];
-    vhbox(-w / 2, 0, -d / 2, w / 2, H * .88, d / 2, c, .95);
-    vhbox(-w / 2 - .25, H * .88, -d / 2 - .25, w / 2 + .25, H * .88 + .34, d / 2 + .25, [.60, .50, .36], .92);
-    vhbox(-w / 2 - .25, H * .88 + .34, -d / 2 - .25, w / 2 + .25, H * .88 + .72, -d / 2 - .05, [.64, .53, .38], .9);
-    vhbox(-w / 2 - .25, H * .88 + .34, d / 2 + .05, w / 2 + .25, H * .88 + .6, d / 2 + .25, [.60, .49, .35], .9);
-    vhbox(w * .1, H * .88 + .34, d * .05, w * .36, H * .88 + .89, d * .3, [.62, .51, .29], .9);
+    vhbox(-w / 2, -.12, -d / 2, w / 2, H * .88, d / 2, c, .95);
+    vhbox(-w / 2 - .25, H * .88 - .12, -d / 2 - .25, w / 2 + .25, H * .88 + .34, d / 2 + .25, [.60, .50, .36], .92);
+    vhbox(-w / 2 - .25, H * .88 + .22, -d / 2 - .25, w / 2 + .25, H * .88 + .72, -d / 2 - .05, [.64, .53, .38], .9);
+    vhbox(-w / 2 - .25, H * .88 + .22, d / 2 + .05, w / 2 + .25, H * .88 + .6, d / 2 + .25, [.60, .49, .35], .9);
+    vhbox(w * .1, H * .88 + .22, d * .05, w * .36, H * .88 + .89, d * .3, [.62, .51, .29], .9);
     vhopenings(w, d, H * .88, false);
   } else if (style === 'slate') {
     const c = [.55, .53, .48];
-    vhbox(-w / 2, 0, -d / 2, w / 2, H * .9, d / 2, c, .95);
+    vhbox(-w / 2, -.12, -d / 2, w / 2, H * .9, d / 2, c, .95);
     for (let k = 1; k < 4; k++)
       vhbox(-w / 2 - .20, k * H * .22, -d / 2 - .21, w / 2 + .20, k * H * .22 + .14, d / 2 + .21, [.47, .46, .42], .85);
     vhopenings(w, d, H * .9, false);
     vhslate(w, d, H * .9);
   } else if (style === 'wood') {
     const c = [.48, .34, .23];
-    vhbox(-w / 2, 0, -d / 2, w / 2, H * .9, d / 2, c, .95);
+    vhbox(-w / 2, -.12, -d / 2, w / 2, H * .9, d / 2, c, .95);
     for (let k = 1; k < 5; k++)
       vhbox(-w / 2 - .20, k * H * .18, -d / 2 - .21, w / 2 + .20, k * H * .18 + .12, d / 2 + .21, [.38, .26, .18], .85);
     vhopenings(w, d, H * .9, false);
     vhroof(w, d, 3, .42, [.40, .28, .19], { y: H * .9, eave: w * .18 });
   } else if (style === 'thatch') {           /* 草房：低矮土坯墙 + 厚茅草顶 */
-    vhbox(-w / 2 - .2, -.3, -d / 2 - .2, w / 2 + .2, .16, d / 2 + .2, [.48, .42, .32], .88);
-    vhbox(-w / 2, .16, -d / 2, w / 2, H, d / 2, [.63, .54, .38], .95);
+    /* 台基统一由 vhfoundation 提供（顶面 .16）。旧版这里又压了一张同高台基，
+       两张顶面完全共面，俯视时颜色来回跳 —— 就是「部分房屋的墙在闪」。
+       墙底插进台基 .12，接触面错开，既不共面也不留缝。 */
+    vhbox(-w / 2, .04, -d / 2, w / 2, H, d / 2, [.63, .54, .38], .95);
     vhopenings(w, d, H, true);
     vhthatch(w, d, H, 1.6);
   } else {                                  /* 瓦房：白墙 + 出檐瓦顶 + 马头墙 */
     vhbox(-w / 2 - w * .08, -.4, -d / 2 - d * .08, w / 2 + w * .08, -.02, d / 2 + d * .08, MAT.stoneD, .8);
-    vhbox(-w / 2, 0, -d / 2, w / 2, H, d / 2, wall, .95);
+    vhbox(-w / 2, -.12, -d / 2, w / 2, H, d / 2, wall, .95);
     for (const sx of [-1, 1]) {
-      /* 木饰柱必须整个探出墙面：旧版外侧面正好压在 w/2 上，与墙共面 → 满屏闪烁 */
-      vhbox(sx * (w / 2 - .10) - .12, 0, -d / 2 - .18, sx * (w / 2 - .10) + .12, H, d / 2 + .18, MAT.wood, .82);
-      if (RNG() < .6) vhbox(sx * (w / 2) - .16, H, -d * .3, sx * (w / 2) + .18, H + 1.0, d * .3, wall, .9);
+      /* 木饰柱外侧面要离墙 ≥ .18：只差 .02 时深度缓冲分不开，相机一动就交替。 */
+      vhbox(sx * (w / 2 + .06) - .12, 0, -d / 2 - .18, sx * (w / 2 + .06) + .12, H, d / 2 + .18, MAT.wood, .82);
+      if (RNG() < .6) vhbox(sx * (w / 2) - .16, H - .12, -d * .3, sx * (w / 2) + .18, H + 1.0, d * .3, wall, .9);
     }
     vhopenings(w, d, H, false);
     vhroof(w, d, 4, .55, roof, { y: H, eave: w * .22 });
@@ -2026,6 +2038,7 @@ function vhtent(o) {                       /* 驻扎地帐篷：矮身 + 小坡�
 function vhtower(o) {                     /* 望楼：2 层 + 坡顶 */
   const w0 = o.w || 3.4, d0 = o.d || 3.4;
   const sp = footSpan(o.x, o.z, w0 + 1.2, d0 + 1.2, o.rot || 0), base = Math.max(o.y || -1e9, sp.hi + .04);
+  setXF(o.x, base, o.z, o.rot || 0);          /* 台基/影子之前必须先定位，否则画到世界原点 */
   vhfoundation(w0, d0, undefined, (base - sp.lo) + 1.5);
   vhshadow(o.x, o.z, Math.max(w0, d0) * 0.62);
   let w = w0, d = d0, y = 0;
@@ -2035,7 +2048,7 @@ function vhtower(o) {                     /* 望楼：2 层 + 坡顶 */
        上面那层整个埋进下面那层里，只剩两个屋顶浮着 —— 就是"墙没合在一起"。 */
     setXF(o.x, base + y, o.z, o.rot || 0);
     vhbox(-w / 2 - .5, -.4, -d / 2 - .5, w / 2 + .5, 0, d / 2 + .5, MAT.stoneD, .8);
-    vhbox(-w / 2, 0, -d / 2, w / 2, h, d / 2, MAT.wall, .9);
+    vhbox(-w / 2, -.12, -d / 2, w / 2, h, d / 2, MAT.wall, .9);
     for (const sx of [-1, 1]) vhbox(sx * (w / 2 + .06) - .1, .3, -d / 2 - .20, sx * (w / 2 + .06) + .1, h * .8, d / 2 + .20, MAT.red, .85);
     vhroof(w, d, 3, .5, o.roof || MAT.jade, { y: h, eave: w * 0.22 });
     w *= .84; d *= .84; y += h + 3 * .5 + .4;
@@ -2051,10 +2064,10 @@ function vhgate(o) {                      /* 关隘：两翼墩台 + 中央门�
   vhbox(-w / 2 - .6, -.5, -d / 2 - .6, w / 2 + .6, .02, d / 2 + .6, MAT.stoneD, .8);
   for (const sx of [-1, 1]) {
     const x0 = sx > 0 ? w * .18 : -w / 2, x1 = sx > 0 ? w / 2 : -w * .18;
-    vhbox(x0, 0, -d / 2, x1, h, d / 2, MAT.stoneD, .9);
+    vhbox(x0, -.12, -d / 2, x1, h, d / 2, MAT.stoneD, .9);
     vhbox(x0 - .2, h * .5, -d / 2 - .26, x1 + .2, h * .58, d / 2 + .26, MAT.red, .85);
   }
-  vhbox(-w * .18, 0, -d / 2 - .3, w * .18, h * .7, d / 2 + .3, MAT.woodD, .8);   /* 门洞 */
+  vhbox(-w * .18, -.12, -d / 2 - .3, w * .18, h * .7, d / 2 + .3, MAT.woodD, .8);   /* 门洞 */
   vhroof(w, d, 4, .7, MAT.tileD, { y: h, eave: w * 0.2 });
   clrXF();
 }
@@ -2064,7 +2077,7 @@ function vhbridge(o) {                    /* 渡口桥：横跨河道的廊桥 *
   vhbox(-len / 2, -.3, -w / 2, len / 2, 0, w / 2, MAT.stoneD, .8);
   for (let k = 0; k <= Math.round(len / 3); k++) {
     const x = -len / 2 + k * len / Math.round(len / 3);
-    for (const z of [-w / 2 + .3, w / 2 - .3]) vhbox(x - .14, 0, z - .14, x + .14, h, z + .14, MAT.red, .85);
+    for (const z of [-w / 2 + .3, w / 2 - .3]) vhbox(x - .14, -.12, z - .14, x + .14, h, z + .14, MAT.red, .85);
   }
   vhroof(len, w, 3, .5, MAT.green, { y: h, eave: len * 0.12 });
   clrXF();
@@ -2291,7 +2304,7 @@ function vhgranary(o) { setXF(o.x, lift3(o.x, o.y, o.z, 5.6, 4.4, o.rot || 0), o
 function vhhall(o) { setXF(o.x, lift3(o.x, o.y, o.z, 7.2, 5.6, o.rot || 0), o.z, o.rot || 0); const w = 6, d = 4.5, h = 3.6;
   vhfoundation(w, d);
   vhbox(-w / 2, -.4, -d / 2, w / 2, h, d / 2, [.82, .78, .68], .9);
-  for (const sx of [-1, 1]) vhbox(sx * (w / 2 - .2) - .2, 0, -d / 2 - .1, sx * (w / 2 - .2) + .2, h * .8, d / 2 + .1, [.55, .20, .16], .85);
+  for (const sx of [-1, 1]) vhbox(sx * (w / 2 + .04) - .2, 0, -d / 2 - .1, sx * (w / 2 + .04) + .2, h * .8, d / 2 + .1, [.55, .20, .16], .85);
   vhroof(w, d, 4, .6, [.40, .26, .18], { y: h, eave: w * 0.22 }); clrXF(); }
 /* 彝海（结盟湖泊）：一圈浅蓝石环作标记 */
 function vhlake(o) { const r = o.r || 10; for (let a = 0; a < 6.28; a += 0.35) {
@@ -4204,7 +4217,10 @@ const VoxelMap = {
     S.quality = o.quality === 'low' ? 'low' : 'high';
     S.canvas = document.createElement('canvas'); mount.appendChild(S.canvas);
     resize();
-    const gl = S.canvas.getContext('webgl2', { antialias: S.quality === 'high', preserveDrawingBuffer: true, alpha: false });
+    /* 抗锯齿不能跟着画质档位关：low 档（窄屏自动选、或帧率低时自动降档）会关掉 MSAA，
+       于是屋檐、瓦口、石阶这些一两像素宽的细边整片爬动，看着就是「墙在闪」。
+       low 档已经靠 dpr 上限和粗 LOD 省了填充率，MSAA 的代价远小于闪烁的观感损失。 */
+    const gl = S.canvas.getContext('webgl2', { antialias: true, preserveDrawingBuffer: true, alpha: false });
     if (!gl) { err('当前浏览器 / 预览环境不支持 WebGL2，无法显示 3D 地图。请用 Chrome 或 Edge 直接双击打开本机文件 route3d.html；或改玩 2D 版 index.html（不依赖 WebGL）。'); this.dispose(); return false; }
     S.gl = gl; gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     try {
@@ -4414,7 +4430,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'index.html?v=39&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'index.html?v=40&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4560,8 +4576,8 @@ if (typeof location !== 'undefined') {
 }
 })();
 </script>
-<script src="data.js?v=39"></script>
-<script src="game3d.js?v=39"></script>
+<script src="data.js?v=40"></script>
+<script src="game3d.js?v=40"></script>
 <script>
 (function () {
   var Q = location.search;
