@@ -8,7 +8,7 @@
 - **线上玩**：<https://long-march-game-a6v.pages.dev/> —— Cloudflare Pages，站点根目录就是 `游戏/`，从命令行一条 `wrangler pages deploy` 就能更新（见 §一 末）。想先选模式就用 <https://long-march-game-a6v.pages.dev/start.html>，直接开打就用不带后缀的根地址（落在平面行军图，顶栏随时能切立体长卷）。
 - **历史 V1**：<https://dybfvs37.qwenwork.host/> —— 由**千问办公（qwenwork.cn）托管**，不在 Qoder Sites 控制面里，**本机没有该站凭据，不能从命令行发布**，只留作旧版存档，不再更新。
 - **本地玩**：双击 `游戏/start.html`（主入口，平面 / 立体两种地图并列；零依赖，离线可用，进度存本机浏览器）
-- **技术形态**：纯静态前端，8 个文件、约 631 KB（另含 `art/` CG 约 2.9 MB），没有 npm、没有构建、没有后端、没有外链
+- **技术形态**：纯静态前端，9 个文件、约 631 KB（另含 `art/` CG 约 2.9 MB），没有 npm、没有构建、没有后端、没有外链
 - **许可**：CC BY-NC-SA 4.0（见 `LICENSE`）—— 允许署名后做课堂展示、学习、二创，**不许商用**，改编必须以同一许可发布并说明改动
 
 > 下面是给"接手部署/维护的人（或 AI 工具）"看的交接说明；只想玩的话，点开上面的链接就够了。
@@ -19,7 +19,7 @@
 
 **站点根目录 = `游戏/`**，首页 = `游戏/start.html`。
 
-发布清单（就这 8 个文件，共约 631 KB）：
+发布清单（就这 9 个文件，共约 631 KB）：
 
 | 文件 | 作用 |
 |---|---|
@@ -31,6 +31,7 @@
 | `游戏/route3d.html` | 立体长卷页（体素 WebGL2 场景） |
 | `游戏/game3d.js` | 3D 侧事件/关卡引擎，与平面共用存档 |
 | `游戏/favicon.svg` | 标签页图标 |
+| `游戏/_redirects` | 托管平台的首页规则：把根路径 `/` 让给 `start.html`（不是游戏代码，改它不用 bump `?v=`；只认 Cloudflare Pages / Netlify 这类平台，千问办公那种会当普通文件忽略） |
 
 要点：
 
@@ -49,7 +50,7 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 
 ### 已经在线上跑的那一份：Cloudflare Pages
 
-2026-11-11 上线，项目名 `long-march-game`，正式域名 <https://long-march-game-a6v.pages.dev/>，站点根目录 = `游戏/`（8 个页面文件 + `art/` 21 张 CG 与两份说明，共 3.6 MB）。改完东西要更新线上，只需：
+2026-11-11 上线，项目名 `long-march-game`，正式域名 <https://long-march-game-a6v.pages.dev/>，站点根目录 = `游戏/`（9 个发布文件 + `art/` 21 张 CG 与两份说明，共 3.6 MB）。改完东西要更新线上，只需：
 
 ```bash
 node 测试/发布自检.js                 # 必须先过
@@ -61,7 +62,7 @@ npx --yes wrangler pages deploy 游戏 --project-name long-march-game --commit-d
 四条实测过的注意点：
 
 1. Pages 会把 `route3d.html` 用 **308** 规范化到 `/route3d`，查询串保留 —— 平面页里 `route3d.html?v=34&node=…` 那条深链照常能用，核验时别把 308 当成 404。
-2. 根路径 `/` 命中的是 `游戏/index.html`（平面行军图），**不是** `start.html`。要让 `start.html` 当首页，得往发布清单里加一个 `_redirects`，那就破坏了上面「只发这 8 个文件」的约定 —— 目前选择不加，两个入口分别给了链接，顶栏的「主入口」按钮也能回到选择页。
+2. 根路径 `/` 由 `游戏/_redirects` **302** 到 `/start.html`（双模式主入口），再被 Pages 规范化成 `/start`。规则只匹配 `/`，`/index.html`、`/route3d.html?v=36&node=…` 这些照常直达；换到不认 `_redirects` 的平台（比如千问办公那种）首页就会落回平面行军图，发布后要重新点开根地址确认。
 3. 每次部署返回的 `哈希.long-march-game-a6v.pages.dev` 是这一次快照的预览域，正式域名始终不带哈希。`localStorage` 按 origin 隔离，本机 `file://` 的旧进度不会出现在线上，这是预期，别为此写同步逻辑。
 4. **这条不替代参赛要求**：Qoder 比赛要作品部署在魔搭创空间，pages.dev 只当演示与验收链接，创空间那条路见 `16-比赛版优化方案-v1.md` 第八节与 `部署/`。
 
@@ -73,11 +74,12 @@ npx --yes wrangler pages deploy 游戏 --project-name long-march-game --commit-d
 红军长征游戏/
 ├─ README.md              ← 本文件（交接说明）
 ├─ index.html             ← 整包发布时的根跳转页（仅跳转，非游戏本体）
-├─ 游戏/                  ← ★ 站点根目录，只发这 8 个文件
+├─ 游戏/                  ← ★ 站点根目录，只发这 9 个文件
 │  ├─ start.html          ← 主入口：平面 / 立体并列
 │  ├─ index.html          ← 平面行军
 │  ├─ route3d.html        ← 立体长卷
 │  ├─ game3d.js           ← 3D 玩法引擎（与平面共用存档）
+│  ├─ _redirects          ← 把根路径 / 让给 start.html（平台规则，非代码）
 │  ├─ style.css / data.js / game.js / favicon.svg
 ├─ 测试/                  ← 本地自检与跑测，不发布
 │  ├─ 发布自检.js         ← 发布前/改动后跑这个
@@ -185,4 +187,4 @@ C11 落地后的复核（2026-10-26，四策略各 125 局共 500 局，详见 `
 - **提交历史**：作者与提交者邮箱已统一改写为 GitHub 匿名邮箱（`321759050+chenyiding24-lang@users.noreply.github.com`），历史里不再暴露真实邮箱。
 - **随仓库公开的作业材料**：`00-*.md` 有课程名、选题方向与实践周日期；`10 / 13 / 15` 有跑测数据与被否掉的旧方案。新旧文档并存是迭代记录，不是笔误，见 §三。
 - **只在本地、没进仓库的**：`备份-*/`（线上 V1 留档）与 `更新包-*/`（发布交接包）已写进 `.gitignore`；本仓库从未包含 `.env`、令牌、密钥或账号信息。
-- **想复用哪一部分**：做站点只要 `游戏/` 8 个文件（CG 另放 `游戏/art/`）；改玩法先读 `08-*.md`；调数值先读 `15-*.md` 再跑 `测试/balance-bench.js` 拿数据，别凭感觉拧。
+- **想复用哪一部分**：做站点只要 `游戏/` 9 个文件（CG 另放 `游戏/art/`）；改玩法先读 `08-*.md`；调数值先读 `15-*.md` 再跑 `测试/balance-bench.js` 拿数据，别凭感觉拧。

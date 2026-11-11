@@ -16,10 +16,11 @@ const pass = m => ok.push(m);
 const fail = m => bad.push(m);
 
 /* ---------- 1. 站点清单 ---------- */
-const MUST = ['start.html', 'index.html', 'style.css', 'data.js', 'game.js', 'game3d.js', 'route3d.html', 'favicon.svg'];
+const MUST = ['start.html', 'index.html', 'style.css', 'data.js', 'game.js', 'game3d.js', 'route3d.html', 'favicon.svg', '_redirects'];
 /* route3d.html = 体素路线长卷（独立单文件、零外链），顶栏「3D 路线长卷」直接链过去
    game3d.js = 3D 版事件/关卡引擎，route3d.html 用它跑玩法；与 2D game.js 是两套结算，
-               发布时两个都要发，但改玩法时记得两边都改。 */
+               发布时两个都要发，但改玩法时记得两边都改。
+   _redirects = 托管平台的首页规则（把 / 让给 start.html），不是游戏代码，改了不用 bump ?v=。 */
 const EXTRA_OK = new Set(MUST);
 if (!fs.existsSync(SITE)) fail('找不到站点根目录：' + SITE);
 else {
