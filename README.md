@@ -49,12 +49,14 @@ node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错�
 
 ### 已经在线上跑的那一份：Cloudflare Pages
 
-2026-11-11 上线，项目名 `long-march-game`，正式域名 <https://long-march-game-a6v.pages.dev/>，站点根目录 = `游戏/`（31 个文件，含 `art/` 21 张 CG，共 3.6 MB）。改完东西要更新线上，只需：
+2026-11-11 上线，项目名 `long-march-game`，正式域名 <https://long-march-game-a6v.pages.dev/>，站点根目录 = `游戏/`（8 个页面文件 + `art/` 21 张 CG 与两份说明，共 3.6 MB）。改完东西要更新线上，只需：
 
 ```bash
 node 测试/发布自检.js                 # 必须先过
-cd 游戏 && npx --yes wrangler pages deploy . --project-name long-march-game --commit-dirty=true
+npx --yes wrangler pages deploy 游戏 --project-name long-march-game --commit-dirty=true
 ```
+
+**别 `cd 游戏` 再跑**：wrangler 会在当前工作目录生成 `.wrangler/` 缓存，虽然 `.gitignore` 挡住了，但它会混进发布目录里（上传时会被跳过，看着碍事）。
 
 四条实测过的注意点：
 
