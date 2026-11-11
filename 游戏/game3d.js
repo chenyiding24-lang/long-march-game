@@ -340,7 +340,12 @@
       Hud.render();
       if (!Store.s.flags.seenIntro) { Store.s.flags.seenIntro = true; Store.save(); Pages.intro(); }
       else if (!Store.s.flags.sawNotes) { setTimeout(() => Pages.notes(), 600); }
-      else { Toast.show('点击发亮的地名或右侧「下一站」行军；点当前所在地名查看事件'); }
+      else {
+        const touch = !!(G.matchMedia && G.matchMedia('(pointer:coarse)').matches);
+        Toast.show(touch
+          ? '左下方向键移动 · 右下升降 · 双指缩放；点金色地名或「下一站」走一格'
+          : '点击发亮的地名或「下一站」行军；点当前所在地名查看事件');
+      }
     },
 
     bindChrome() {
@@ -349,6 +354,7 @@
       on('nav-wall', () => Pages.wall());
       on('nav-history', () => Pages.history());
       on('nav-cards', () => Pages.cards());
+      on('nav-comrades', () => Pages.comrades());
       on('nav-help', () => Pages.help());
       on('nav-memory', () => Pages.memory());
       on('nav-code', () => Pages.codePage());
@@ -1103,6 +1109,14 @@
       }).join('');
       Modal.open({ title: '手法卡与道具', kicker: '本局持有', size: 'wide', html: `<div class="card-list">${html}</div>` });
     },
+    comrades() {
+      const s = Store.s;
+      const html = s.comrades.length ? s.comrades.map(id => {
+        const c = COMRADES[id]; if (!c) return '';
+        return `<article class="card-detail"><h4>${esc(c.name)}<span class="tag">${esc(c.role || '')}</span></h4><p>${esc(c.story || c.desc || '')}</p></article>`;
+      }).join('') : '<p class="lead">身边暂时无人。</p>';
+      Modal.open({ title: '身边战友', kicker: `在队 ${s.comrades.length} 人`, size: 'wide', html: `<div class="card-list">${html}</div>` });
+    },
     cardDetail(id) { const c = CARDS[id]; if (!c) return; Modal.open({ title: c.name, kicker: c.school || '', size: 'sm', html: `<p class="lead">${esc(c.desc)}</p>` }); },
     comradeDetail(id) { const c = COMRADES[id]; if (!c) return; Modal.open({ title: c.name, kicker: c.role || '', size: 'sm', html: `<p class="lead">${esc(c.story || c.desc || '')}</p>` }); },
     memory() {
@@ -1170,6 +1184,14 @@
           ns.map(n => `<button class="nav-go${n.id === rec ? ' rec' : ''}" data-go="${n.id}">${esc(n.name)}${n.id === rec ? ' <span class="recdot">★</span>' : ''}</button>`).join('') + `</div>` : '<div class="nav-next"><i class="dim">已到终点或暂无可走之路</i></div>');
       nav.querySelector('[data-enter]').addEventListener('click', () => Game.enter(cur));
       Array.prototype.forEach.call(nav.querySelectorAll('[data-go]'), b => b.addEventListener('click', () => Game.onNodeClick(b.dataset.go)));
+      /* 底部大按钮直接写出目的地，手机端不用先读左下角再猜该走哪一格 */
+      const np = doc.getElementById('next-pill');
+      if (np) {
+        const n = ns[0];
+        np.innerHTML = n ? '<em>下一站</em><b>' + esc(n.name) + '</b>' : '已到终点';
+        np.disabled = !n;
+        np.title = n ? '前往 ' + n.name : '已到终点';
+      }
       Game.refreshTrays();
     },
 

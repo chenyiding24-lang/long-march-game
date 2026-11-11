@@ -28,6 +28,7 @@ const map3dJSON = /<script type="application\/json" id="map3d">\s*([\s\S]*?)<\/s
 const ctx = {
   console, Math, JSON, Date, Float32Array, Uint8Array, Uint16Array, Uint32Array, Int32Array,
   performance: { now: () => 0 },
+  addEventListener: noop, removeEventListener: noop,
   requestAnimationFrame: noop, cancelAnimationFrame: noop,
   setTimeout: noop, clearTimeout: noop, setInterval: noop, clearInterval: noop,
   navigator: { userAgent: 'node' }, localStorage: { getItem: () => null, setItem: noop },

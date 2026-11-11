@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#12110e">
 <meta name="description" content="长征：万水千山 —— 平面行军与 3D 立体长卷，同一局进度，随时切换。">
 <title>长征：万水千山 · 主入口</title>
-<link rel="icon" href="favicon.svg?v=37" type="image/svg+xml">
+<link rel="icon" href="favicon.svg?v=38" type="image/svg+xml">
 <style>
   :root {
     --paper:#ece2cb; --paper-2:#d9cdb3; --ink:#1b1813; --ink-2:#5e5546;
@@ -263,7 +263,7 @@
     </div>
 
     <div class="mode-grid" aria-label="选择地图模式">
-      <a class="mode-card" id="mode-2d" href="index.html?v=37&from=start" data-mode="2d">
+      <a class="mode-card" id="mode-2d" href="index.html?v=38&from=start" data-mode="2d">
         <div class="preview">
           <span class="preview-tag"><i></i>一纸山河</span>
           <svg viewBox="0 0 420 212" role="img" aria-label="平面行军路线示意">
@@ -300,7 +300,7 @@
         </div>
       </a>
 
-      <a class="mode-card" id="mode-3d" href="route3d.html?v=37&play=1&from=start" data-mode="3d">
+      <a class="mode-card" id="mode-3d" href="route3d.html?v=38&play=1&from=start" data-mode="3d">
         <div class="preview">
           <span class="preview-tag"><i></i>立体长卷</span>
           <svg viewBox="0 0 420 212" role="img" aria-label="3D 立体行军路线示意">
@@ -355,7 +355,7 @@
   </footer>
 </main>
 
-<script src="data.js?v=37"></script>
+<script src="data.js?v=38"></script>
 <script>
 (function () {
   'use strict';
@@ -406,8 +406,8 @@
       try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
       var at = hasSave && s.at ? '&node=' + encodeURIComponent(s.at) : '';
       var target = mode === '3d'
-        ? 'route3d.html?v=37&play=1&from=start' + at
-        : 'index.html?v=37&from=start' + at;
+        ? 'route3d.html?v=38&play=1&from=start' + at
+        : 'index.html?v=38&from=start' + at;
       location.href = target;
     });
   });

@@ -51,6 +51,8 @@
      以前每个控件各自 absolute 钉一个 top/bottom 像素值，窗口一窄就全压在一起。 */
   #ui-top, #ui-bottom { position:absolute; left:16px; right:16px; z-index:6; display:flex;
     flex-wrap:wrap; gap:10px; pointer-events:none; }
+  /* 顶带里的手机菜单抽屉必须盖住底栏；弹窗 root 仍在其上（z-index 30）。 */
+  #ui-top { z-index:20; }
   #ui-top { top:16px; align-items:flex-start; }
   #ui-bottom { bottom:16px; align-items:flex-end; }
   #ui-top-l, #ui-bottom-l, #ui-bottom-r { display:flex; flex-direction:column; gap:8px; }
@@ -162,6 +164,9 @@
   .node-hit.next::after { content:'下一站'; position:absolute; top:-24px; left:50%; transform:translateX(-50%);
     font-family:var(--sans); font-size:11px; letter-spacing:.18em; white-space:nowrap; color:#fff3d6;
     background:rgba(15,14,10,.82); padding:2px 8px; border-radius:10px; text-shadow:0 1px 2px #000; }
+  .node-hit.cur::after { content:'你在这里'; position:absolute; top:-24px; left:50%; transform:translateX(-50%);
+    font-family:var(--sans); font-size:11px; letter-spacing:.12em; white-space:nowrap; color:#e6dcc4;
+    background:rgba(15,14,10,.82); padding:2px 8px; border-radius:10px; text-shadow:0 1px 2px #000; }
   @keyframes nhpulse { 0%,100%{ box-shadow:0 0 0 3px rgba(214,189,120,.30);} 50%{ box-shadow:0 0 0 7px rgba(214,189,120,.10);} }
   @keyframes nnext { 0%,100%{ box-shadow:0 0 0 4px rgba(214,189,120,.45),0 0 12px rgba(214,189,120,.5);} 50%{ box-shadow:0 0 0 9px rgba(214,189,120,.16),0 0 22px rgba(214,189,120,.62);} }
 
@@ -175,6 +180,10 @@
     font-family:"Songti SC","SimSun",serif; font-size:14px; letter-spacing:.12em; color:#F2ECDA;
     padding:9px 22px; border:1px solid rgba(214,189,120,.6); background:rgba(140,59,46,.6); cursor:pointer; border-radius:24px; }
   .g3d-next:hover { background:rgba(140,59,46,.9); }
+  #next-pill em { font-style:normal; font-size:10px; letter-spacing:2px; opacity:.86; }
+  #next-pill em::after { content:' · '; }
+  #next-pill b { font-weight:600; }
+  #next-pill b::after { content:' ▸'; }
 
   .g3d-toast { flex:0 0 100%;
     display:flex; flex-direction:column; gap:6px; align-items:center; pointer-events:none; font-family:"Songti SC","SimSun",serif; }
@@ -387,38 +396,63 @@
 
   /* 进入 3D 视图前，隐藏全部玩法 UI，避免覆盖封面、拦截“进入 3D 视图”按钮的点击。
      VoxelMap.init 成功后由 JS 给 <body> 加上 .entered，再淡入显示。 */
-  #hud, #hand-tray, #comrade-tray, #g3d-topbar, #next-pill, .g3d-brandbar {
+  #hud, #hand-tray, #comrade-tray, #g3d-topbar, #next-pill, .g3d-brandbar, #nav-menu, #cam-reset {
     opacity:0; visibility:hidden; pointer-events:none; transition:opacity .35s ease; }
   body.entered #hud, body.entered #hand-tray, body.entered #comrade-tray,
-  body.entered #g3d-topbar, body.entered #next-pill, body.entered .g3d-brandbar {
+  body.entered #g3d-topbar, body.entered #next-pill, body.entered .g3d-brandbar,
+  body.entered #nav-menu, body.entered #cam-reset {
     opacity:1; visibility:visible; pointer-events:auto; }
 
-  /* 窄屏（断点跟 2D 页一致）：字号与内边距先收紧，让每条带尽量只占一两行 */
-  @media (max-width:760px) {
+  /* 手机端只留一个「菜单」入口：其余功能收进底部抽屉，桌面完全不出现这些元素。 */
+  #nav-menu, #cam-reset, #menu-scrim, .menu-sheet-title { display:none; }
+  #nav-view, #nav-comrades, #nav-2d, #nav-home { display:none; }
+  .g3d-scrim { position:fixed; inset:0; z-index:44; background:rgba(8,7,5,.58);
+    pointer-events:auto; -webkit-tap-highlight-color:transparent; }
+  #menu-scrim.on { display:block; }
+  .g3d-scrim.on { display:block; }
+  #nav-menu {
+    align-items:center; justify-content:center; gap:4px; min-width:58px; height:44px;
+    padding:0 9px; border:1px solid rgba(214,189,120,.55); border-radius:10px;
+    background:rgba(20,19,15,.82); color:#f3e7ce; font:600 12px/1 var(--sans);
+    letter-spacing:1px; cursor:pointer; -webkit-tap-highlight-color:transparent;
+  }
+  #nav-menu::before { content:'☰'; font-size:16px; line-height:1; }
+  #nav-menu:active, #nav-menu[aria-expanded="true"] { background:rgba(140,59,46,.86); border-color:#d6bd78; }
+  .menu-sheet-title { grid-column:1/-1; align-items:center; justify-content:space-between;
+    padding:1px 2px 3px; color:#d8cbb0; font:600 12px/1.4 var(--sans); letter-spacing:2px; }
+  .menu-sheet-title small { color:#8f8776; font-weight:400; letter-spacing:1px; }
+
+  /* 窄屏（断点跟 2D 页一致）：字号与内边距先收紧，让每条带尽量只占一两行。
+     手机横屏宽度常超过 760，但高度只有三百多：用「粗指针 + 矮视口」也算手机。 */
+  @media (max-width:760px), (pointer:coarse) and (max-height:520px) {
     /* 窄屏顶带改成三行网格：品牌 / 视图工具 + 功能导航 / 四资源。
        资源条不再用固定 top 钉住，导航和资源各占一行，互不遮挡。 */
     #ui-top {
-      top:10px; left:8px; right:8px; gap:6px;
-      display:grid; grid-template-columns:auto minmax(0,1fr);
+      top:8px; left:8px; right:8px; gap:6px;
+      display:grid; grid-template-columns:minmax(0,1fr) auto;
       grid-template-areas:
-        "brand brand"
-        "tools hud"
-        "nav nav"
-        "toast toast"
-        "legend legend"
-        "meta meta";
+        "hud menu"
+        "toast toast";
       align-items:start; flex-wrap:nowrap; overflow:visible;
     }
     #ui-top-l { display:contents; }
-    .g3d-brandbar { grid-area:brand; min-width:0; width:100%; }
-    #hud3d { grid-area:tools; min-width:0; }
-    #hud3d, #hud { align-self:start; }
+    .g3d-brandbar { display:none; }
+    #nav-menu { grid-area:menu; display:inline-flex; }
+    #hud3d { display:none; }
+    #hud3d.on:not(.open) { display:none; }
     #g3d-topbar {
-      grid-area:nav; width:100%; min-width:0; margin-left:0;
-      flex-wrap:nowrap; justify-content:space-between; overflow-x:auto; scrollbar-width:none;
-      padding-right:0; -webkit-mask-image:none; mask-image:none;
+      position:fixed; left:8px; right:8px; z-index:45;
+      bottom:calc(10px + env(safe-area-inset-bottom));
+      display:none; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px;
+      width:auto; min-width:0; margin:0; padding:10px;
+      border:1px solid rgba(182,172,147,.4); border-radius:12px;
+      background:linear-gradient(180deg,rgba(28,26,20,.98),rgba(16,15,12,.98));
+      box-shadow:0 18px 48px rgba(0,0,0,.55); font-family:var(--serif);
     }
-    #g3d-topbar::-webkit-scrollbar { display:none; }
+    #g3d-topbar.open { display:grid; }
+    #g3d-topbar .menu-sheet-title { display:flex; }
+    #g3d-topbar #nav-view, #g3d-topbar #nav-comrades,
+    #g3d-topbar #nav-2d, #g3d-topbar #nav-home { display:grid; }
     #hud {
       grid-area:hud; position:static; inset:auto; width:auto; min-width:0;
       display:grid; grid-template-columns:repeat(4,minmax(0,1fr));
@@ -427,49 +461,67 @@
     #hud .res { min-width:0; width:auto; gap:5px; padding:4px 6px; }
     #hud .res-k { font-size:12px; }
     #hud .res-v { min-width:24px; font-size:14px; }
-    #legend { grid-area:legend; max-width:100%; }
-    #meta { grid-area:meta; }
+    #legend { display:none; position:fixed; left:8px; right:8px; top:66px; z-index:20; max-width:none; }
+    #legend.on { display:flex; }
+    #meta { display:none !important; }
     #toast { grid-area:toast; max-width:100%; }
 
-    #hud3d button, .g3d-topbar button { font-size:11px; min-height:34px; padding:5px 8px; }
-    .g3d-topbar button { white-space:nowrap; }
-    .g3d-brandbar { gap:7px; padding:5px 6px; }
-    .g3d-title { font-size:15px; letter-spacing:3px; }
-    .g3d-sub, .mode-sync { display:none; }
-    .mode-tab { min-height:32px; padding:5px 8px; font-size:10.5px; }
+    #hud3d button, #g3d-topbar button, #g3d-topbar a { font-size:12px; min-height:44px; padding:6px 8px; }
+    #g3d-topbar button, #g3d-topbar a { white-space:nowrap; border-radius:8px; }
+    #g3d-topbar button { letter-spacing:1px; }
+    #g3d-topbar a { display:grid; place-items:center; color:#E6DCC4; text-decoration:none;
+      border:1px solid rgba(182,172,147,.4); background:rgba(20,19,15,.6); }
+    #g3d-topbar #reset-btn { color:#f0b8aa; border-color:rgba(214,120,100,.5); }
+    /* 视角/画质面板：从菜单点进来，底栏抽屉式弹出，不再常驻右上角 */
+    #hud3d.on.open {
+      display:flex; position:fixed; left:8px; right:8px; z-index:46;
+      bottom:calc(10px + env(safe-area-inset-bottom));
+      max-height:72vh; overflow:auto; padding:10px;
+      border:1px solid rgba(182,172,147,.4); border-radius:12px;
+      background:linear-gradient(180deg,rgba(28,26,20,.98),rgba(16,15,12,.98));
+      box-shadow:0 18px 48px rgba(0,0,0,.55);
+    }
+    #hud3d .scene-head { width:100%; justify-content:space-between; }
+    #hud3d #btn-tools { display:none; }
+    #hud3d .scene-note { display:block; font-size:10px; padding-left:0; }
+    #hud3d.on.open .scene-tools { display:grid; grid-template-columns:1fr 1fr; gap:8px; width:100%; }
+    #scene-tools select { grid-column:1/-1; width:100%; min-height:42px; }
     #place { display:none; }
-    .scene-note { display:none; }
 
-    /* 底部：行进面板与「下一站」并排，手牌/身边人单独一行横向滑。
-       这样 390px 宽也能看到可点的手牌，不用猜整条底栏还能横划。 */
+    /* 底部只留「当前地点 + 下一站」。手牌/战友改由菜单进入，
+       把纵向空间还给地图；下一站按钮直接写出目的地，不用再猜。 */
     #ui-bottom {
-      left:8px; right:8px; bottom:10px; gap:8px;
+      left:8px; right:8px; bottom:calc(10px + env(safe-area-inset-bottom)); gap:8px;
       display:grid; grid-template-columns:minmax(0,1fr) auto;
-      grid-template-areas:"nav next" "trays trays";
+      grid-template-areas:"nav next";
       align-items:end; flex-wrap:nowrap; overflow:visible;
     }
     #ui-bottom-l { grid-area:nav; min-width:0; width:100%; align-items:stretch; }
     #g3d-nav-slot { min-width:0; }
-    .g3d-nav { width:100%; max-width:100%; padding:9px 11px; }
+    .g3d-nav { width:100%; max-width:100%; padding:8px 10px; }
     .g3d-nav .nav-cur { flex-wrap:wrap; gap:5px 8px; font-size:14px; }
     .g3d-nav .nav-cur b { font-size:16px; }
     .g3d-nav .nav-cur-tip { display:none; }
-    .g3d-nav .nav-next { margin-top:7px; gap:5px; }
-    #next-pill { grid-area:next; align-self:end; margin:0; padding:8px 13px;
-      font-size:12.5px; white-space:nowrap; }
-    #ui-bottom-r {
-      grid-area:trays; width:100%; display:flex; flex-direction:row;
-      align-items:center; gap:8px; overflow-x:auto; scrollbar-width:none;
-      padding:1px 24px 1px 1px;
-      -webkit-mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 22px),transparent 100%);
-      mask-image:linear-gradient(90deg,#000 0,#000 calc(100% - 22px),transparent 100%);
-    }
-    #ui-bottom-r::-webkit-scrollbar { display:none; }
-    .g3d-tray { max-width:none; flex:0 0 auto; flex-wrap:nowrap; }
-    #hand-tray { order:1; } #comrade-tray { order:2; }
-    #meta { font-size:10px; line-height:1.6; }
-    .g3d-next { padding:8px 16px; font-size:13px; }
-    .g3d-tray .chip { min-height:34px; font-size:11.5px; padding:5px 9px; }
+    .g3d-nav .nav-next { display:none; }
+    .g3d-nav .nav-enter { min-height:38px; padding:5px 10px; }
+    #next-pill { grid-area:next; align-self:stretch; margin:0; padding:7px 14px;
+      min-height:48px; font-size:13px; white-space:nowrap; border-radius:26px;
+      max-width:60vw; overflow:hidden; display:flex; flex-direction:column;
+      align-items:center; justify-content:center; gap:1px; line-height:1.15; }
+    #next-pill em::after { content:none; }
+    #next-pill b::after { content:none; }
+    #next-pill b { max-width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    #next-pill:disabled { opacity:.55; cursor:default; }
+    #ui-bottom-r { display:none; }
+    #cam-reset { display:flex; }
+
+    /* 可点热区放大：手指不必精确戳 20px 的点。 */
+    .node-hit { width:34px; height:34px; border-width:2px; font-size:15px; touch-action:manipulation; }
+    .node-hit.reach { width:38px; height:38px; }
+    .node-hit.cur { width:44px; height:44px; font-size:22px; }
+    .node-hit.next { width:46px; height:46px; }
+    .node-hit.next::after { top:-26px; font-size:12px; }
+    .node-hit.cur::after { top:-26px; font-size:12px; }
 
     /* 剧情弹窗窄屏：史料从双栏改单栏，避免 95px 宽的细长字列。 */
     .lore-list { grid-template-columns:1fr; }
@@ -491,26 +543,57 @@
     #meta { white-space:nowrap; }
   }
 
-  /* ---------- 触屏机位盘（手机没有键盘，也没有滚轮）----------
-     只在粗指针设备且已进入 3D 后出现；键鼠桌面上 display:none，等于不存在，
-     所以 JS 那边照常挂监听，不必再按设备分支写两套代码。 */
+  /* ---------- 触屏移动盘（Minecraft 式双拇指）----------
+     左下：前后左右；右下：上升/下降；双指捏合只缩放。
+     只在粗指针设备、进入 3D 后出现；键鼠桌面完全不显示。 */
   #touch-pad {
-    position:fixed; right:10px; top:50%; transform:translateY(-50%); z-index:6;
-    display:none; flex-direction:column; align-items:flex-end; gap:7px;
-    touch-action:none; user-select:none; -webkit-user-select:none;
+    position:fixed; inset:0; z-index:9; display:none;
+    pointer-events:none; touch-action:none;
+    user-select:none; -webkit-user-select:none;
   }
-  @media (pointer:coarse) { body.entered #touch-pad { display:flex; } }
-  #touch-pad .tp-row { display:flex; gap:6px; }
-  #touch-pad .tp-sq { display:grid; grid-template-columns:repeat(2,42px); gap:6px; }
-  #touch-pad button {
-    width:42px; height:42px; display:grid; place-items:center; padding:0;
-    border:1px solid rgba(230,220,196,.34); border-radius:10px;
-    background:rgba(23,21,15,.66); color:var(--paper);
-    font:600 15px/1 system-ui,sans-serif; -webkit-tap-highlight-color:transparent;
+  @media (pointer:coarse) { body.entered #touch-pad { display:block; } }
+  #move-pad {
+    position:absolute; left:12px; bottom:calc(104px + env(safe-area-inset-bottom));
+    width:150px; height:150px; display:grid;
+    grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr);
+    gap:6px; pointer-events:auto;
   }
-  #touch-pad button.press { background:var(--red); border-color:#fff3d6; }
-  #touch-pad .tp-fold { width:auto; height:25px; padding:0 12px; font-size:11px; letter-spacing:2px; opacity:.82; }
-  #touch-pad.min .tp-foldable { display:none; }
+  #move-pad [data-k="w"] { grid-area:1/2; }
+  #move-pad [data-k="a"] { grid-area:2/1; }
+  #cam-reset { grid-area:2/2; }
+  #move-pad [data-k="d"] { grid-area:2/3; }
+  #move-pad [data-k="s"] { grid-area:3/2; }
+  #lift-pad {
+    position:absolute; right:12px; bottom:calc(104px + env(safe-area-inset-bottom));
+    display:flex; flex-direction:column; gap:8px; pointer-events:auto;
+  }
+  #move-pad button, #lift-pad button {
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
+    width:100%; height:100%; min-width:0; padding:0; border-radius:12px;
+    border:1px solid rgba(230,220,196,.36); background:rgba(23,21,15,.72);
+    color:var(--paper); font:600 15px/1 system-ui,sans-serif;
+    -webkit-tap-highlight-color:transparent; touch-action:none; cursor:pointer;
+    box-shadow:0 4px 12px rgba(0,0,0,.22);
+  }
+  #move-pad button span, #lift-pad button span { font-size:9px; letter-spacing:1px; color:#c9b995; font-weight:500; }
+  #move-pad button.press, #lift-pad button.press { background:var(--red); border-color:#fff3d6; }
+  #move-pad button.press span, #lift-pad button.press span { color:#fff3d6; }
+  #lift-pad button { width:56px; height:56px; }
+  #cam-reset {
+    display:flex; position:static; width:100%; height:100%;
+    border-radius:12px; background:rgba(20,19,15,.86); color:#f3e7ce;
+    border:1px solid rgba(214,189,120,.5); box-shadow:none;
+    font:600 10px/1 var(--sans); letter-spacing:1px;
+  }
+  #cam-reset b { font-size:17px; line-height:1; font-weight:400; }
+  #cam-reset:active { background:rgba(140,59,46,.9); }
+  /* 横屏手机高度紧：整体缩一号，给地图留出视线。 */
+  @media (max-height:520px) {
+    #move-pad { left:10px; bottom:calc(84px + env(safe-area-inset-bottom)); width:126px; height:126px; gap:5px; }
+    #lift-pad { right:10px; bottom:calc(84px + env(safe-area-inset-bottom)); gap:6px; }
+    #lift-pad button { width:48px; height:48px; }
+    #move-pad button span, #lift-pad button span { font-size:8px; }
+  }
 </style>
 </head>
 <body>
@@ -551,7 +634,7 @@
       <div class="scene-head">
         <button id="btn-tools" type="button" aria-expanded="false">视图工具</button>
         <button id="btn-legend">图例</button>
-        <span class="scene-note">视角 / 画质 / 漫游</span>
+        <span class="scene-note">视角与画质 · 点空白处关闭</span>
       </div>
       <div class="scene-tools" id="scene-tools">
         <button id="btn-view">视角：俯瞰</button>
@@ -567,16 +650,23 @@
     <div id="legend"></div>
     <div id="meta"></div>
   </div>
+  <button id="nav-menu" type="button" aria-expanded="false" aria-controls="g3d-topbar">菜单</button>
+  <div id="menu-scrim" class="g3d-scrim" aria-hidden="true"></div>
   <!-- 3D 玩法层：游戏3D 引擎所需容器（game3d.js 仅借用，不改 3D 渲染结构） -->
   <nav id="g3d-topbar" class="g3d-topbar">
+    <span class="menu-sheet-title">功能菜单 <small>点空白处关闭</small></span>
     <button id="nav-board">木牌</button>
     <button id="nav-wall">名单墙</button>
     <button id="nav-history">史料</button>
     <button id="nav-cards">行囊</button>
+    <button id="nav-comrades">战友</button>
     <button id="nav-help">手册</button>
     <button id="nav-memory">记忆</button>
     <button id="nav-code">存档</button>
-    <button id="reset-btn">清空</button>
+    <button id="nav-view">视角</button>
+    <button id="nav-2d">平面地图</button>
+    <a id="nav-home" href="start.html">主入口</a>
+    <button id="reset-btn">清空存档</button>
   </nav>
   <div id="hud" class="g3d-hud"></div>
   <div id="toast" class="g3d-toast"></div>
@@ -594,23 +684,18 @@
   </div>
 </div>
 
-<!-- 触屏机位盘：手机上没有键盘，漫游平移/升降与缩放得靠按住的按钮；桌面靠 CSS 完全不显示这块 -->
-<div id="touch-pad" aria-label="触屏机位操作">
-  <button class="tp-fold" id="tp-fold" type="button" aria-expanded="true">操控</button>
-  <div class="tp-foldable">
-    <div class="tp-row"><button type="button" data-k="w" aria-label="向前移">▲</button></div>
-    <div class="tp-row">
-      <button type="button" data-k="a" aria-label="向左移">◀</button>
-      <button type="button" data-k="reset" aria-label="机位复位">◎</button>
-      <button type="button" data-k="d" aria-label="向右移">▶</button>
-    </div>
-    <div class="tp-row"><button type="button" data-k="s" aria-label="向后移">▼</button></div>
+<!-- 触屏移动盘：左下前后左右（中心回正），右下上升/下降；缩放交给双指捏合。 -->
+<div id="touch-pad" aria-label="触屏移动操作">
+  <div id="move-pad">
+    <button type="button" data-k="w" aria-label="向前移动">▲<span>前</span></button>
+    <button type="button" data-k="a" aria-label="向左移动">◀<span>左</span></button>
+    <button id="cam-reset" type="button" aria-label="回正视角"><b>⌖</b><span>回正</span></button>
+    <button type="button" data-k="d" aria-label="向右移动">▶<span>右</span></button>
+    <button type="button" data-k="s" aria-label="向后移动">▼<span>后</span></button>
   </div>
-  <div class="tp-sq tp-foldable">
-    <button type="button" data-z="-1" aria-label="拉近">＋</button>
-    <button type="button" data-z="1" aria-label="拉远">－</button>
-    <button type="button" data-k="e" aria-label="升高">↑</button>
-    <button type="button" data-k="q" aria-label="下降">↓</button>
+  <div id="lift-pad">
+    <button type="button" data-k="e" aria-label="上升">▲<span>上升</span></button>
+    <button type="button" data-k="q" aria-label="下降">▼<span>下降</span></button>
   </div>
 </div>
 
@@ -3461,7 +3546,7 @@ function updateChunks(px, pz, budgetMs) {
 const S = {
   inited: false, quality: 'high', gl: null, canvas: null, raf: 0, paused: false, pauseRefs: 0,
   snowVao: null, snowVbo: null, pr: {}, u: {},
-  uPos: 0, speed: 0, lookYaw: 0, lookPitch: -.35, viewMode: 'near',
+  uPos: 0, speed: 0, lookYaw: 0, lookPitch: -.35, viewMode: 'near', nearZoom: 1,
   free: false, freeFocus: null, freeYaw: 0, freePitch: 0.5, freeDist: 120, keys: {},
   tween: null, listeners: {}, lastNode: null, t0: 0, frames: 0, fps: 0,
   cleanups: [], weather: 'snow', fly: null, flyName: '长征全线', orbit: 0, intro: 0,
@@ -3561,25 +3646,30 @@ function cameraAt(p, ease) {
        这里把机位略抬高、视线多压一点，并把目标高度限制在前方地面附近；用户仍可
        拖拽抬头看山与天，因为只在向下看时才套用构图上限。 */
     const portrait = S.canvas.clientHeight > S.canvas.clientWidth * 1.12;
-    const back = portrait ? 86 : 76, up = portrait ? 74 : 52;
+    /* 近景缩放：只改「退多远、抬多高、看多远」，不改 uPos。
+       以前双指捏合会沿路线挪机位，玩家想拉近看一眼却走出了好几格。 */
+    const zoom = clamp(S.nearZoom || 1, .55, 2.2);
+    const back = (portrait ? 86 : 76) * zoom;
+    const up = (portrait ? 74 : 52) * clamp(.70 + .30 * zoom, .70, 1.55);
+    const fwd = (portrait ? 76 : 56) * zoom;
     const bx = clamp(p[0] - tx * back, -HALFX + 6, HALFX - 6);
     const bz = clamp(p[1] - tz * back, -HALFZ + 6, HALFZ - 6);
     const nrx = -tz, nrz = tx;                  /* 右向量：横向取样，专门治"旁边的墙" */
     let maxNear = sampleH(bx, bz);
-    for (let d = 0; d <= 90; d += 15) {
-      for (let s = -54; s <= 54; s += 27) {
+    for (let d = 0; d <= 90 * zoom; d += 15) {
+      for (let s = -54 * zoom; s <= 54 * zoom; s += 27) {
         maxNear = Math.max(maxNear, sampleH(bx + tx * d + nrx * s, bz + tz * d + nrz * s));
       }
     }
     const boost = 12 * (1 - ease);
     const eyeY = Math.max(sampleH(bx, bz) + up, maxNear + 9) + boost;
     const eye = [bx, eyeY, bz];
-    const ax2 = clamp(p[0] + tx * 56, -HALFX, HALFX), az2 = clamp(p[1] + tz * 56, -HALFZ, HALFZ);
+    const ax2 = clamp(p[0] + tx * fwd, -HALFX, HALFX), az2 = clamp(p[1] + tz * fwd, -HALFZ, HALFZ);
     const groundAt = sampleH(ax2, az2);
     /* 俯仰改成「视线仰角」：lookPitch>0 抬头看山与天，<0 低头看路。
        旧版 at 永远落在 eye 下方 46，只能往下看 —— 玩家反馈"只能左右转、不能上下看"。 */
     const elev = clamp(S.lookPitch - (portrait ? .19 : 0), -1.0, 1.0) * 0.62;
-    let atY = eyeY + Math.tan(elev) * (portrait ? 76 : 56);
+    let atY = eyeY + Math.tan(elev) * fwd;
     if (elev < 0) atY = Math.max(atY, groundAt + 3);
     atY = Math.min(atY, eyeY + 160);
     if (portrait && elev < 0) atY = Math.min(atY, groundAt + 18);
@@ -3982,8 +4072,8 @@ function frame(now) {
       '绘制 ' + Math.round(verts / 3) + ' 面 · ' + S.fps + ' fps（本机浏览器，真机未测）' +
       (S.pend ? ' · 加载中 ' + S.pend : '') + '<br>' +
       (TOUCH_3D
-        ? '单指转头/俯仰 · 双指捏合缩放、双指拖动沿路挪机位 · 右侧「操控盘」平移/升降 · 下拉跳分段'
-        : '拖动转头/俯仰 · 滚轮沿路或缩放 · 漫游时 WASD/方向键 平移、Q 下降/E 上升 · 下拉跳分段');
+        ? '左下方向键移动 · 右下升降 · 双指捏合缩放 · 单指拖动看四周 · 双击空白处回正'
+        : '拖动转头/俯仰 · 滚轮缩放 · 双击回正 · 漫游时 WASD/方向键 平移、Q 下降/E 上升 · 下拉跳分段');
     /* G3 · 自适应降档看门狗：high 档连续 5 秒 <20fps（弱机/手机误选 high）自动转 low，保流畅 */
     if (S.quality === 'high' && S.intro > 3 && S.fps < 20) S.lowStreak = (S.lowStreak || 0) + 1; else S.lowStreak = 0;
     if (S.lowStreak >= 5) {
@@ -4005,23 +4095,24 @@ function resize() {
   S.canvas.height = Math.max(1, Math.floor(stage.clientHeight * d));
   syncOverlaySize();
 }
-/* 缩放只有一个动作，三个入口共用：滚轮、双指捏合、触屏盘的 ＋/－。
-   漫游态改机位距离，跟随态改沿路位置 uPos。dir<0 拉近、dir>0 拉远。 */
+/* 缩放只有一个动作，两个入口共用：桌面滚轮、手机双指捏合。
+   两种视角都只改机位距离，不再改 uPos —— 拉近看路不等于往前行军。dir<0 拉近、dir>0 拉远。 */
 function camZoom(dir) {
   const s = dir < 0 ? -1 : 1;
   if (S.free) S.freeDist = clamp(S.freeDist * (s > 0 ? 1.10 : 0.90), 30, 600);
-  else S.uPos = clamp(S.uPos - s * 0.012, 0, 1);
+  else S.nearZoom = clamp((S.nearZoom || 1) * (s > 0 ? 1.12 : 0.89), .55, 2.2);
 }
-/* 双指拖动 = 漫游态平移注视点：手指拖着地面往哪走，注视点就往哪走（和地图拖动同手感）。
-   屏幕右向 = right、屏幕深处 = fwd；纵向位移换算成 fwd，横向换算成 right。
-   freeFocus 的钳制交给每帧的漫游分支，这里不重复算。 */
-function freePan(px, py) {
-  if (!S.freeFocus) return;
-  const k = S.freeDist * 0.0018;
-  const cy = Math.cos(S.freeYaw), sy = Math.sin(S.freeYaw);
-  const fwd = [sy, 0, cy], right = [-cy, 0, sy];
-  S.freeFocus[0] += (-right[0] * px + fwd[0] * py) * k;
-  S.freeFocus[2] += (-right[2] * px + fwd[2] * py) * k;
+/* 回正：无论玩家把镜头拖到哪、缩到多近，都回到「跟着当前部队」的默认构图。
+   双击地图与右下角「回正」按钮共用这一处。 */
+function resetView() {
+  S.viewMode = 'near';
+  const vb = document.getElementById('btn-view'); if (vb) vb.textContent = '视角：俯瞰';
+  S.keys = {};                                  /* 回正时松开所有方向键，避免镜头自己继续飘 */
+  const tp = document.getElementById('touch-pad'); if (tp) tp.querySelectorAll('.press').forEach(b => b.classList.remove('press'));
+  S.lookYaw = 0; S.lookPitch = -.35; S.nearZoom = 1;
+  S.free = false; S.freeFocus = null; S.freeYaw = 0; S.freePitch = .62; S.freeDist = 120;
+  const bf = document.getElementById('btn-free'); if (bf) bf.textContent = '漫游：关';
+  if (placeEl) placeEl.textContent = '';
 }
 function bindEvents() {
   const c = S.canvas;
@@ -4029,6 +4120,7 @@ function bindEvents() {
      手机上没有滚轮也没有键盘，双指就是这个页面唯一的缩放手段。 */
   const pts = new Map();
   let lx = 0, ly = 0, pinchPrev = 0, pmid = null;
+  let moved = false, downX = 0, downY = 0, lastTap = 0, lastTapX = 0, lastTapY = 0;
   const two = () => { const v = [...pts.values()]; return [v[0], v[1]]; };
   const dist = (a, b) => Math.max(14, Math.hypot(a.x - b.x, a.y - b.y));
   const down = e => {
@@ -4037,7 +4129,7 @@ function bindEvents() {
       const [a, b] = two();
       pinchPrev = dist(a, b);
       pmid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-    } else { lx = e.clientX; ly = e.clientY; }
+    } else { lx = e.clientX; ly = e.clientY; downX = e.clientX; downY = e.clientY; moved = false; }
     try { c.setPointerCapture && c.setPointerCapture(e.pointerId); } catch (err) {}
   };
   const move = e => {
@@ -4047,24 +4139,32 @@ function bindEvents() {
       const [a, b] = two();
       const d = dist(a, b);
       const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      if (S.free) { S.freeDist = clamp(S.freeDist * (d / pinchPrev), 30, 600); freePan(m.x - pmid.x, m.y - pmid.y); }
+      if (S.free) { S.freeDist = clamp(S.freeDist * (d / pinchPrev), 30, 600); }
       else {
-        /* 跟随态没有机位距离可缩：捏合与竖向拖动都算「沿路挪动」（改 uPos，和滚轮同一件事），横向拖动转头 */
-        S.uPos = clamp(S.uPos - (m.y - pmid.y) * 0.0009 + Math.log(d / pinchPrev) * 0.22, 0, 1);
-        S.lookYaw = clamp(S.lookYaw + (m.x - pmid.x) * 0.003, -1.4, 1.4);
+        /* 跟随态：捏合只缩放机位距离；行军永远只由「点金色地名 / 下一站」触发。 */
+        S.nearZoom = clamp((S.nearZoom || 1) * (d / pinchPrev), .55, 2.2);
       }
       pinchPrev = d; pmid = m;
       return;
     }
     const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
+    if (Math.hypot(e.clientX - downX, e.clientY - downY) > 7) moved = true;
     if (S.free) { S.freeYaw -= dx * 0.005; S.freePitch = clamp(S.freePitch + dy * 0.004, 0.05, 1.30); }
     else { S.lookYaw = clamp(S.lookYaw + dx * 0.004, -1.4, 1.4); S.lookPitch = clamp(S.lookPitch - dy * 0.004, -1.0, 1.05); }
   };
   const up = e => {
+    const wasTap = pts.size === 1 && !moved;
     pts.delete(e.pointerId);
     if (pts.size < 2) { pinchPrev = 0; pmid = null; }
     /* 捏合抬起一根后，剩下那根接着当单指转头用，不能拿旧坐标算出天大的位移 */
     if (pts.size === 1) { const rest = [...pts.values()][0]; lx = rest.x; ly = rest.y; }
+    /* 双击/双触空白处 = 回正。手机上比在菜单里找「回正」快得多。 */
+    if (wasTap) {
+      const now = performance.now();
+      if (now - lastTap < 330 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 32) {
+        resetView(); lastTap = 0;
+      } else { lastTap = now; lastTapX = e.clientX; lastTapY = e.clientY; }
+    }
   };
   const wheel = e => { e.preventDefault(); camZoom(Math.sign(e.deltaY) || 1); };
   const kd = e => { (S.keys = S.keys || {})[e.key.toLowerCase()] = true; };
@@ -4142,6 +4242,9 @@ const VoxelMap = {
     const n = NODES3D.find(x => x.id === nodeId); if (!n) return false;
     let bestU = 0, bd = 1e9;
     ROUTE.forEach((r, k) => { const d = Math.hypot(r[0] - n.x, r[1] - n.z); if (d < bd) { bd = d; bestU = k / (ROUTE.length - 1); } });
+    /* 行军/点站时把镜头交还给部队：玩家刚用方向键漫游过，也不该错过下一站。 */
+    S.free = false; S.freeFocus = null;
+    const bf = document.getElementById('btn-free'); if (bf) bf.textContent = '漫游：关';
     S.tween = { from: S.uPos, to: bestU, t0: performance.now() };
     return true;
   },
@@ -4215,15 +4318,19 @@ const VoxelMap = {
     S.canvas = null; S.gl = null; S.inited = false; S.paused = false; S.lastNode = null;
     if (routeOverlay) routeOverlay.style.display = 'none';
     routeShown = false;
-    S.listeners = {}; S.tween = null; S.intro = 0; S.lookYaw = 0; S.fly = null; S.flyName = '长征全线';
-    cover.style.display = 'flex'; hud.classList.remove('on'); legendEl.classList.remove('on'); meta.classList.remove('on');
+    S.listeners = {}; S.tween = null; S.intro = 0; S.lookYaw = 0; S.nearZoom = 1; S.fly = null; S.flyName = '长征全线';
+    cover.style.display = 'flex'; hud.classList.remove('on'); hud.classList.remove('open');
+    legendEl.classList.remove('on'); meta.classList.remove('on');
+    const scrimEl = document.getElementById('menu-scrim'); if (scrimEl) scrimEl.classList.remove('on');
+    const barEl = document.getElementById('g3d-topbar'); if (barEl) barEl.classList.remove('open');
     placeEl.textContent = ''; errBox.style.display = 'none';
   },
   get state() {
     let v = 0; CHUNKS.forEach(c => { v += c.count; });
     return { inited: S.inited, quality: S.quality, paused: S.paused,
       uPos: S.uPos, speed: S.speed, tween: !!S.tween,
-      free: S.free, freeDist: Math.round(S.freeDist), lookYaw: +S.lookYaw.toFixed(3),
+      free: S.free, freeDist: Math.round(S.freeDist), nearZoom: +(S.nearZoom || 1).toFixed(2),
+      lookYaw: +S.lookYaw.toFixed(3), lookPitch: +S.lookPitch.toFixed(3),
       focus: S.freeFocus ? S.freeFocus.map(v => Math.round(v)) : null,
       keys: Object.keys(S.keys || {}).filter(k => S.keys[k]),
       chunks: CHUNKS.size, grid: NXB + 'x' + NZB, vertices: v,
@@ -4242,7 +4349,8 @@ window.CWQS_START_3D = function (quality) {
   if (window.Game3D) {
     Game3D.setNodes(NODES3D.map(n => ({ id:n.id, name:n.name, x:n.x, z:n.z, h:sampleH(n.x, n.z) })));
     Game3D.init(VoxelMap);
-    if (Game3D.flyCurrent) Game3D.flyCurrent();
+    /* 带 ?u= / ?node= 进来时，URL 就是这次要看的机位：别再被存档里的当前节点拽回去。 */
+    if (Game3D.flyCurrent && !S.urlPin) Game3D.flyCurrent();
   }
   try { localStorage.setItem('cwqs_mode_v1', '3d'); } catch (e) {}
   return true;
@@ -4295,7 +4403,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'index.html?v=37&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'index.html?v=38&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4317,7 +4425,7 @@ $('#btn-view').addEventListener('click', e => {
 });
 $('#btn-free').addEventListener('click', e => {
   S.free = !S.free;
-  if (S.free) { S.freeFocus = null; e.currentTarget.textContent = '漫游：开'; err(TOUCH_3D ? '自由漫游：单指转头/俯仰，双指捏合缩放、双指拖动平移；或用右侧操控盘 ▲▼◀▶ 平移、↑↓ 升降' : '自由漫游：拖拽转头/俯仰，滚轮缩放；WASD / 方向键 平移，Q 下降 / E 上升'); }
+  if (S.free) { S.freeFocus = null; e.currentTarget.textContent = '漫游：开'; err(TOUCH_3D ? '自由漫游：左下前后左右移动，右下上升/下降；双指捏合缩放，单指拖动看四周；中心「回正」回到部队' : '自由漫游：拖拽转头/俯仰，滚轮缩放；WASD / 方向键 平移，Q 下降 / E 上升'); }
   else { e.currentTarget.textContent = '漫游：关'; S.lookYaw = 0; S.lookPitch = -.35; }
 });
 $('#btn-legend').addEventListener('click', () => legendEl.classList.toggle('on'));
@@ -4335,42 +4443,70 @@ $('#btn-shot').addEventListener('click', () => {
 });
 $('#btn-exit').addEventListener('click', () => VoxelMap.dispose());
 
-/* ---------- 触屏机位盘：按住即动，松手即停 ----------
-   ▲▼◀▶↑↓ 走的是键盘那套 S.keys，帧循环照旧结算，不另开一条移动逻辑。
-   手机玩家多半不知道平移要先开漫游，所以按下移动键时若仍在跟随态，直接替他打开并说一声。
-   ＋/－ 与滚轮、双指捏合共用 camZoom，缩放只有一处算法，不会三个入口三种手感。 */
+/* ---------- 手机端菜单抽屉 ----------
+   主界面只留「菜单」一个入口；木牌/名单墙/史料/行囊/战友/手册/记忆/存档/清空
+   全部收进底部抽屉。桌面这些按钮仍在原来的顶栏，不受影响。 */
+(function bindMobileMenu() {
+  const btn = document.getElementById('nav-menu');
+  const bar = document.getElementById('g3d-topbar');
+  const box = document.getElementById('hud3d');
+  const scrim = document.getElementById('menu-scrim');
+  if (!btn || !bar) return;
+  const close = () => {
+    bar.classList.remove('open');
+    if (box) box.classList.remove('open');
+    if (scrim) scrim.classList.remove('on');
+    btn.setAttribute('aria-expanded', 'false');
+  };
+  const openMenu = () => {
+    close();
+    bar.classList.add('open');
+    if (scrim) scrim.classList.add('on');
+    btn.setAttribute('aria-expanded', 'true');
+  };
+  btn.addEventListener('click', () => {
+    if (bar.classList.contains('open')) close(); else openMenu();
+  });
+  if (scrim) scrim.addEventListener('click', close);
+  bar.addEventListener('click', e => {
+    const item = e.target.closest('button, a'); if (!item) return;
+    if (item.id === 'nav-view') return;   /* 视角面板由下面单独接管 */
+    setTimeout(close, 0);
+  });
+  const viewBtn = document.getElementById('nav-view');
+  if (viewBtn) viewBtn.addEventListener('click', () => {
+    close();
+    if (box) box.classList.add('open');
+    if (scrim) scrim.classList.add('on');
+  });
+  const twoDBtn = document.getElementById('nav-2d');
+  if (twoDBtn) twoDBtn.addEventListener('click', go2D);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+})();
+const camResetBtn = document.getElementById('cam-reset');
+if (camResetBtn) camResetBtn.addEventListener('click', resetView);
+
+/* ---------- 触屏移动盘：按住即动，松手即停 ----------
+   左下前后左右、右下上升/下降，复用键盘那套 S.keys，帧循环统一结算。
+   第一次按方向键时自动打开漫游；中心「回正」退出漫游、回到部队。
+   缩放不设按钮：双指捏合已经在 canvas 上处理，避免第三个缩放入口。 */
 (function bindTouchPad() {
   const pad = document.getElementById('touch-pad');
   if (!pad) return;
-  const fold = document.getElementById('tp-fold');
   const KEYS = ['w', 'a', 's', 'd', 'e', 'q'];
   const setKey = (k, on) => { (S.keys = S.keys || {})[k] = on; };
   const letGo = () => { KEYS.forEach(k => setKey(k, false)); pad.querySelectorAll('.press').forEach(b => b.classList.remove('press')); };
-  try {
-    if (localStorage.getItem('cwqs_tp_fold_v1') === '1') { pad.classList.add('min'); fold.setAttribute('aria-expanded', 'false'); }
-  } catch (e) {}
-  fold.addEventListener('click', () => {
-    const min = pad.classList.toggle('min');
-    fold.setAttribute('aria-expanded', min ? 'false' : 'true');
-    try { localStorage.setItem('cwqs_tp_fold_v1', min ? '1' : '0'); } catch (e) {}
-  });
-  pad.querySelectorAll('button[data-k], button[data-z]').forEach(btn => {
-    const k = btn.getAttribute('data-k'), z = btn.getAttribute('data-z');
-    let repeat = null;
+  pad.querySelectorAll('button[data-k]').forEach(btn => {
+    const k = btn.getAttribute('data-k');
     const stop = () => {
-      if (repeat) clearInterval(repeat); repeat = null;
-      if (k && k !== 'reset') setKey(k, false);
+      setKey(k, false);
       btn.classList.remove('press');
     };
     btn.addEventListener('pointerdown', e => {
       e.preventDefault();
       btn.classList.add('press');
       try { btn.setPointerCapture(e.pointerId); } catch (ignore) {}
-      if (k === 'reset') {
-        /* 把机位交还给部队：freeFocus 置空后，下一帧 freeInit 按当前 uPos 重建 */
-        S.freeFocus = null; S.lookYaw = 0; S.lookPitch = -.35; return;
-      }
-      if (z) { camZoom(+z); repeat = setInterval(() => camZoom(+z), 110); return; }
+      /* 跟随态按方向键＝玩家想自己走：先开漫游，再按住移动。 */
       if (!S.free) { const bf = document.getElementById('btn-free'); if (bf) bf.click(); }
       setKey(k, true);
     });
@@ -4391,12 +4527,13 @@ if (typeof location !== 'undefined') {
   if (/[?&]view=overview/.test(Q)) { S.viewMode = 'overview'; }
   if (/[?&]still=1/.test(Q)) { S.speed = 0; S.intro = 7; }
   const mU = /[?&]u=([0-9.]+)/.exec(Q);
-  if (mU) { S.uPos = clamp(parseFloat(mU[1]) || 0, 0, 1); S.tween = null; }
+  if (mU) { S.uPos = clamp(parseFloat(mU[1]) || 0, 0, 1); S.tween = null; S.urlPin = true; }
   /* ?cam=fx,fz[,dist,pitch,yaw]：指定自由机位。玩家用不到，是给「自查/截图取证」用的，
      让水面、地形、聚落这类只能"看"的东西每次都能在同一机位复现。 */
   const mCam = /[?&]cam=(-?[\d.]+),(-?[\d.]+)(?:,([\d.]+))?(?:,([\d.]+))?(?:,(-?[\d.]+))?/.exec(Q);
   if (mCam) {
     S.free = true;
+    S.urlPin = true;                 /* 显式机位优先，启动时不要被当前节点拽回跟随视角 */
     const fx = clamp(parseFloat(mCam[1]), -HALFX + 24, HALFX - 24);
     const fz = clamp(parseFloat(mCam[2]), -HALFZ + 24, HALFZ - 24);
     S.freeFocus = [fx, sampleH(fx, fz) + 6, fz];
@@ -4405,13 +4542,13 @@ if (typeof location !== 'undefined') {
     if (mCam[5] !== undefined) S.freeYaw = parseFloat(mCam[5]);
   }
   const mNode = /[?&]node=([A-Za-z0-9_]+)/.exec(Q);
-  if (mNode) { const nn = NODES3D.find(x => x.id === mNode[1]); if (nn) { let bu = 0, bd = 1e9; ROUTE.forEach((r, k) => { const d = Math.hypot(r[0] - nn.x, r[1] - nn.z); if (d < bd) { bd = d; bu = k / (ROUTE.length - 1); } }); S.uPos = bu; S.tween = null; } }
+  if (mNode) { const nn = NODES3D.find(x => x.id === mNode[1]); if (nn) { let bu = 0, bd = 1e9; ROUTE.forEach((r, k) => { const d = Math.hypot(r[0] - nn.x, r[1] - nn.z); if (d < bd) { bd = d; bu = k / (ROUTE.length - 1); } }); S.uPos = bu; S.tween = null; S.urlPin = true; } }
   /* 自动进入放在 game3d.js 加载之后，见页面末尾的启动脚本 */
 }
 })();
 </script>
-<script src="data.js?v=37"></script>
-<script src="game3d.js?v=37"></script>
+<script src="data.js?v=38"></script>
+<script src="game3d.js?v=38"></script>
 <script>
 (function () {
   var Q = location.search;
