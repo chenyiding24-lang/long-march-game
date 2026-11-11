@@ -356,6 +356,7 @@
       on('nav-cards', () => Pages.cards());
       on('nav-comrades', () => Pages.comrades());
       on('nav-help', () => Pages.help());
+      on('nav-guide', () => { if (window.Tutorial) Tutorial.open({ mode: '3d', from: 'game' }); });
       on('nav-memory', () => Pages.memory());
       on('nav-code', () => Pages.codePage());
       on('reset-btn', () => Pages.confirmReset());
@@ -1066,13 +1067,13 @@
     intro() {
       Modal.open({ title: '长征：万水千山', kicker: '3D 立体地图 · 玩法', size: 'wide', cinematic: true, art: 'cg-01',
         html: `<p class="lead">你是红一方面军的通信兵，带着一支队伍往北走。每到一个渡口、一座山、一道关隘，你要在两三个都"错得起的"答案里挑一个；挑完，兵、粮、时、民一起结算；有人倒下，你把名字刻上手里的木牌。</p>
-          <p class="note-hint">立体地图上：点发亮的地名（或右侧「下一站」）行军；点当前所在地名查看事件。资源条在右上角。失败不写 Game Over，写"下一程"。</p>`,
+          <p class="note-hint">立体地图上：点发亮的地名或底部「下一站」行军；点当前所在地名查看事件。手机左下方向键移动、右下升降、双指缩放。资源条在右上角；全部功能收在「菜单」里。失败不写 Game Over，写"下一程"。</p>`,
         actions: [{ text: '出发', kind: 'primary', onClick: () => { Store.s.flags.sawNotes = true; Store.save(); if (Game3D.flyCurrent) Game3D.flyCurrent(); Modal.closeTop(); } }] });
     },
     notes() {
       Modal.open({ title: '玩家须知', kicker: '规则手册', size: 'mid',
         html: `<p class="lead">兵＝还能走的同伴（按建制计）；粮＝口粮天数；时＝追兵窗口；民＝沿途人心（低于 20 民族地区选项锁死）。</p>
-          <p class="note-hint">选项上不标价——先按本心选，结算后再看账。违纪的账会延迟收，但逃不掉。</p>`,
+          <p class="note-hint">选项上不标价——先按本心选，结算后再看账。违纪的账会延迟收，但逃不掉。想一次看全玩法，打开「菜单 → 新手引导」。</p>`,
         actions: [{ text: '知道了', kind: 'primary', onClick: () => { Store.s.flags.sawNotes = true; Store.save(); } }] });
     },
     board() {
@@ -1129,7 +1130,7 @@
     help() {
       Modal.open({ title: '规则手册', kicker: '怎么玩', size: 'mid',
         html: `<p class="lead">四资源互相牵制：兵（人）归零→"下一程"；粮≤0 每格多折人；时≤0 下一格折损翻倍；民<20 民族地区选项锁死。</p>
-          <p class="note-hint">手法卡一次附一张；战友卡只在作战/冻饿时替你挡一次；道具进背包。大关卡第一次打下有"缴获与休整"（粮/时/兵三样带一样）。</p>`,
+          <p class="note-hint">手法卡一次附一张；战友卡只在作战/冻饿时替你挡一次；道具进背包。大关卡第一次打下有"缴获与休整"（粮/时/兵三样带一样）。完整操作与全部功能见「菜单 → 新手引导」。</p>`,
         actions: [{ text: '合上', kind: 'primary' }] });
     },
     codePage() {

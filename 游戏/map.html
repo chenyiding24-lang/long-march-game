@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#26231f">
+<meta name="description" content="长征：万水千山 —— 平面行军图，与立体长卷共用同一局进度。">
+<title>长征：万水千山 · 平面行军</title>
+<link rel="icon" href="favicon.svg?v=41" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=41">
+</head>
+<body>
+<a class="skip" href="#viewport">跳到地图</a>
+<div id="app">
+
+  <!-- 顶栏：地图模式与功能分区，窄屏自动换行 -->
+  <header id="topbar">
+    <div class="brand">
+      <span class="brand-seal">长征</span>
+      <div class="brand-copy">
+        <h1>万水千山</h1>
+        <span class="brand-sub">平面行军 · 统帅视角 · 二万五千里</span>
+      </div>
+    </div>
+    <div class="mode-switch" role="group" aria-label="地图模式">
+      <span class="mode-tab active" aria-current="page"><i></i>平面行军</span>
+      <button class="mode-tab" id="switch-to-3d" type="button"><i></i>立体长卷</button>
+      <span class="mode-sync" title="两套地图共用同一份本地存档"><i></i>进度互通</span>
+    </div>
+    <div class="top-actions">
+      <button class="navlink guide" id="nav-guide" type="button" data-tutorial="2d">新手指南</button>
+      <button class="menu-toggle" id="nav-menu-2d" type="button" aria-expanded="false" aria-controls="topnav">
+        <span>功能</span><b aria-hidden="true">☰</b>
+      </button>
+    </div>
+    <nav id="topnav" aria-label="游戏功能">
+      <span class="menu-sheet-title">功能菜单 <small>点空白处关闭</small></span>
+      <div class="nav-group">
+        <span class="nav-group-title">行军记录</span>
+        <div class="nav-group-links">
+          <button class="navlink" id="nav-cards">行囊</button>
+          <button class="navlink" id="nav-board">木牌</button>
+          <button class="navlink" id="nav-wall">名单墙</button>
+          <button class="navlink" id="nav-history">史料</button>
+          <button class="navlink" id="nav-memory">战友记忆</button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <span class="nav-group-title">规则与帮助</span>
+        <div class="nav-group-links">
+          <button class="navlink" id="nav-help">规则手册</button>
+          <button class="navlink" data-tutorial="2d">新手引导</button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <span class="nav-group-title">本机与入口</span>
+        <div class="nav-group-links">
+          <button class="navlink util" id="nav-code">存档码</button>
+          <button class="navlink dim" id="reset-btn">清空进度</button>
+          <a class="navlink home" href="index.html">主入口</a>
+        </div>
+      </div>
+    </nav>
+    <div class="nav-scrim" id="nav-scrim" aria-hidden="true"></div>
+  </header>
+
+  <!-- 右上角资源条：常驻，CG 时隐藏 -->
+  <div id="hud" aria-label="资源状态"></div>
+
+  <!-- 地图主视图 -->
+  <main id="viewport" aria-label="长征路线地图">
+    <div id="map">
+      <svg id="art-layer" viewBox="0 0 2000 4600" width="2000" height="4600"></svg>
+      <svg id="fog-ring" width="100%" height="100%" style="position:absolute;inset:0;pointer-events:none">
+        <circle id="sight-ring" cx="0" cy="0" r="0"/>
+      </svg>
+    </div>
+    <div id="fog"></div>
+    <div id="vignette"></div>
+    <div class="map-tools">
+      <button id="far-toggle">远望全图</button>
+      <button id="center-btn">回到部队</button>
+      <span class="zoom" id="zoom-label">30%</span>
+      <button id="next-pill" class="next-pill" hidden>下一站</button>
+      <button id="notes-btn" class="map-seal" title="玩家须知" aria-label="玩家须知">须知</button>
+    </div>
+    <div id="next-arrow" aria-hidden="true"></div>
+    <div class="map-note">按住拖动地图 · 滚轮缩放 · Tab 远望全图 · 亮红圈的那一格就是下一站，点它行军</div>
+    <div class="compass">
+      <span>北</span><i></i>
+      <em>全程约二万五千里 · 赣→陕</em>
+    </div>
+    <div class="bottom-trays">
+      <div class="tray">
+        <span class="tray-name">手法卡</span>
+        <div id="hand-tray"></div>
+      </div>
+      <div class="tray">
+        <span class="tray-name">身边人</span>
+        <div id="comrade-tray"></div>
+      </div>
+    </div>
+  </main>
+
+  <div id="modal-root"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+
+  <footer id="footbar">
+    <span>史实分级 A（权威记载）／R（回忆转述）／?（待核实）</span>
+    <span>地图为路线示意图，省界非精确边界；数字口径与出处见「史料与出处」</span>
+  </footer>
+</div>
+
+<script src="data.js?v=41"></script>
+<script src="game.js?v=41"></script>
+<script src="tutorial.js?v=41"></script>
+<script>
+/* 平面 → 立体：先把当前状态落盘，再带着所在节点跳到 3D。
+   两套地图共用 cwqs_save_v1，回来后也从同一节点继续。 */
+document.addEventListener('DOMContentLoaded', function () {
+  var btn = document.getElementById('switch-to-3d');
+  function saveNow() {
+    try { if (window.Game && Game.debug && Game.debug.Store) Game.debug.Store.save(); } catch (e) {}
+  }
+  function go3d() {
+    saveNow();
+    try { localStorage.setItem('cwqs_mode_v1', '3d'); } catch (e) {}
+    var at = null;
+    try {
+      var raw = localStorage.getItem('cwqs_save_v1');
+      at = raw ? (JSON.parse(raw) || {}).at : null;
+    } catch (e) {}
+    location.href = 'route3d.html?v=41&play=1&from=2d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  }
+  if (btn) btn.addEventListener('click', go3d);
+
+  /* 从 3D 切回来时给一条明确的到达反馈。 */
+  if (/[?&]from=3d/.test(location.search)) {
+    setTimeout(function () {
+      try { if (window.Game && Game.debug && Game.debug.Toast) Game.debug.Toast.show('已同步立体长卷进度 · 平面行军'); } catch (e) {}
+    }, 700);
+  }
+});
+</script>
+</body>
+</html>

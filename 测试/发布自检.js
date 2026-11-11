@@ -16,12 +16,12 @@ const pass = m => ok.push(m);
 const fail = m => bad.push(m);
 
 /* ---------- 1. 站点清单 ---------- */
-const MUST = ['start.html', 'index.html', 'style.css', 'data.js', 'game.js', 'game3d.js', 'route3d.html', 'favicon.svg'];
+const MUST = ['index.html', 'map.html', 'start.html', 'style.css', 'data.js', 'game.js', 'game3d.js', 'route3d.html', 'tutorial.js', 'favicon.svg'];
 /* route3d.html = 体素路线长卷（独立单文件、零外链），顶栏「3D 路线长卷」直接链过去
    game3d.js = 3D 版事件/关卡引擎，route3d.html 用它跑玩法；与 2D game.js 是两套结算，
                发布时两个都要发，但改玩法时记得两边都改。
-   别在这里加 _redirects：Pages 会把 /index.html 规范化到 /，一旦再用 _redirects 把 / 指向
-   start.html，主入口里「平面行军」那张卡就会 index.html → / → start.html 绕回原地（2026-11-11 踩过）。 */
+   现在 index.html 是真正的主入口，map.html 是平面行军页，start.html 只保留旧书签跳转。
+   Pages 会把 /index.html 规范化到 /，所以根网址打开就是主入口，不再直接落进平面地图。 */
 const EXTRA_OK = new Set(MUST);
 if (!fs.existsSync(SITE)) fail('找不到站点根目录：' + SITE);
 else {
@@ -34,9 +34,9 @@ else {
 
 const read = f => path.join(SITE, f);
 const src = name => { try { return fs.readFileSync(read(name), 'utf8'); } catch (e) { return ''; } };
-const html = src('index.html'), css = src('style.css'), data = src('data.js'), js = src('game.js');
-const js3d = src('game3d.js'), r3d = src('route3d.html'), start = src('start.html');
-const ALL = { 'index.html': html, 'style.css': css, 'data.js': data, 'game.js': js, 'game3d.js': js3d, 'route3d.html': r3d, 'start.html': start };
+const html = src('index.html'), map = src('map.html'), css = src('style.css'), data = src('data.js'), js = src('game.js');
+const js3d = src('game3d.js'), r3d = src('route3d.html'), start = src('start.html'), tutorial = src('tutorial.js');
+const ALL = { 'index.html': html, 'map.html': map, 'style.css': css, 'data.js': data, 'game.js': js, 'game3d.js': js3d, 'route3d.html': r3d, 'start.html': start, 'tutorial.js': tutorial };
 
 /* ---------- 2. 零外链：不许有 CDN / 远程字体 / 网络请求 ---------- */
 /* www.w3.org/2000/svg 是 SVG 命名空间声明，不是请求，白名单 */
@@ -62,8 +62,9 @@ if (!bad.some(b => /外链|module/.test(b))) pass('零外链、零网络请求�
 if (!bad.some(b => /绝对路径/.test(b))) pass('无本机绝对路径（拷到任何机器/任何域名都可用）');
 
 /* ---------- 4. 入口与资源引用对得上 ---------- */
-const refs = [...html.matchAll(/(?:src|href)\s*=\s*["']([^"'#]+)["']/g)].map(m => m[1])
+const refsOf = t => [...t.matchAll(/(?:src|href)\s*=\s*["']([^"'#]+)["']/g)].map(m => m[1])
   .filter(u => !/^data:/.test(u));
+const refs = refsOf(html);
 /* 引用可以带 ?v=N 版本号（托管方边缘按 URL 缓存静态文件，发布后要换号才能把新 css/js 推到访客端）：
    查存在性时先把查询串剥掉，报的仍是原文，这样带号与不带号两种写法都验得过。 */
 refs.forEach(u => {
@@ -71,8 +72,15 @@ refs.forEach(u => {
   fs.existsSync(path.join(SITE, file)) ? null : fail('index.html 引用了不存在的文件：' + u);
 });
 if (refs.length && !bad.some(b => /引用了不存在/.test(b))) pass('index.html 的 ' + refs.length + ' 个本地引用全部命中：' + refs.join('、'));
+const mapRefs = refsOf(map);
+mapRefs.forEach(u => {
+  const file = u.split('?')[0];
+  fs.existsSync(path.join(SITE, file)) ? null : fail('map.html 引用了不存在的文件：' + u);
+});
+if (mapRefs.length && !bad.some(b => /map\.html 引用了不存在/.test(b))) pass('map.html 的 ' + mapRefs.length + ' 个本地引用全部命中：' + mapRefs.join('、'));
 if (/charset="utf-8"/i.test(html)) pass('charset=utf-8 已声明（中文剧情不乱码）'); else fail('index.html 缺 charset=utf-8');
 if (/name="viewport"/.test(html)) pass('有 viewport（手机端能自适应）'); else fail('index.html 缺 viewport，窄屏会挤坏');
+if (/<meta http-equiv="refresh"[^>]+index\.html/i.test(start)) pass('start.html 仅作旧书签跳转，落到 index.html'); else fail('start.html 未正确跳转到 index.html');
 
 /* ---------- 5. 只有一个全局入口，不需要后端 ---------- */
 if (/localStorage/.test(js) && !/sessionStorage|document\.cookie|Authorization|Bearer /.test(js))
@@ -89,15 +97,15 @@ try {
 } catch (e) { fail('无法运行 data校验.js：' + e.message); }
 
 /* ---------- 7. 语法 ---------- */
-[['game.js', js], ['game3d.js', js3d], ['data.js', data]].forEach(([name, t]) => {
+[['game.js', js], ['game3d.js', js3d], ['data.js', data], ['tutorial.js', tutorial]].forEach(([name, t]) => {
   try { new Function(t); pass(name + ' 语法通过'); } catch (e) { fail(name + ' 语法错误：' + e.message); }
 });
 
 /* ---------- 8. 比赛版：缓存版本号、CG 分镜表、图位体积 ---------- */
 /* 托管方边缘按 URL 缓存静态文件，四个引用的版本号必须一起 bump，
    否则改了 data.js 却忘了 game.js，访客看到的会是新旧混搭。 */
-const vers = [...html.matchAll(/\?v=(\d+)/g)].map(m => m[1]);
-if (vers.length >= 4 && vers.every(v => v === vers[0])) pass('四个静态引用版本号一致：?v=' + vers[0]);
+const vers = [...(html + map + r3d).matchAll(/\?v=(\d+)/g)].map(m => m[1]);
+if (vers.length >= 4 && vers.every(v => v === vers[0])) pass('全部静态引用版本号一致：?v=' + vers[0]);
 else fail('静态引用版本号不一致（边缘缓存会让访客看到旧稿）：' + (vers.join('/') || '无版本号'));
 
 /* 所有被引用的 cg-NN 都必须在 CG_ART 表里有运镜与天气，否则放映机不知道怎么动 */
@@ -128,7 +136,7 @@ console.log('单站总体积：' + MUST.map(size).join(' + ') + '\n');
 ok.forEach(m => console.log('  [OK]   ' + m));
 if (bad.length) { console.log('\n=== 必须处理 ===\n' + bad.map(b => '  [FAIL] ' + b).join('\n')); }
 else console.log('\n结论：可直接作为静态站发布 —— 把 游戏/ 里的 ' + EXTRA_OK.size + ' 个文件当网站根目录，' +
-  'start.html 即首页；不需要 npm install、不需要构建、不需要后端。');
+  'index.html 即首页；不需要 npm install、不需要构建、不需要后端。');
 console.log('\n发布后请人工确认（脚本管不了的两件事）：');
 console.log('  1) 手机上竖屏 / 横屏各打一格的观感（样式做了 760px / 430px / hover:none 三档）；');
 console.log('  2) 网址换了 origin，localStorage 是新的 —— 本机 file:// 的旧进度不会出现在线上，这是预期。');

@@ -130,11 +130,26 @@
   .g3d-hud .res-bar { flex:1; height:5px; background:rgba(0,0,0,.35); border-radius:3px; overflow:hidden; }
   .g3d-hud .res-bar i { display:block; height:100%; }
 
-  .g3d-topbar { display:flex; gap:3px; flex-wrap:wrap; justify-content:flex-end; margin-left:auto;
-    max-width:100%; font-family:"Songti SC","SimSun",serif; }
+  /* 功能菜单：桌机与手机都从「菜单」打开，主界面只留行军所需的核心操作。 */
+  .g3d-topbar {
+    position:absolute; top:calc(100% + 8px); right:0; z-index:45;
+    display:none; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px;
+    width:min(470px, calc(100vw - 32px)); max-width:100%; margin:0; padding:13px;
+    border:1px solid rgba(182,172,147,.4); border-radius:9px;
+    background:linear-gradient(180deg,rgba(28,26,20,.99),rgba(16,15,12,.99));
+    box-shadow:0 22px 60px rgba(0,0,0,.58); font-family:"Songti SC","SimSun",serif;
+  }
+  .g3d-topbar.open { display:grid; }
+  .menu-group-title { grid-column:1/-1; padding:1px 2px 0; margin-top:2px;
+    color:#8f8776; font:600 9.5px/1.4 var(--sans); letter-spacing:2.2px; }
+  .menu-group-title:first-of-type { margin-top:0; }
   .g3d-topbar button { font-family:inherit; font-size:12px; letter-spacing:.1em; color:#E6DCC4;
     padding:6px 11px; border:1px solid rgba(182,172,147,.4); background:rgba(20,19,15,.6); cursor:pointer; border-radius:3px; }
   .g3d-topbar button:hover { background:rgba(140,59,46,.55); }
+  .g3d-topbar a { display:grid; place-items:center; min-height:32px; padding:6px 11px;
+    border:1px solid rgba(182,172,147,.4); border-radius:3px; background:rgba(20,19,15,.6);
+    color:#E6DCC4; text-decoration:none; font-size:12px; letter-spacing:.1em; }
+  .g3d-topbar a:hover { background:rgba(140,59,46,.55); color:#fff1d8; }
 
   .g3d-nav { max-width:min(300px,100%);
     background:rgba(20,19,15,.72); border:1px solid rgba(182,172,147,.28); border-radius:6px; padding:12px 14px;
@@ -404,14 +419,15 @@
   body.entered #nav-menu, body.entered #cam-reset {
     opacity:1; visibility:visible; pointer-events:auto; }
 
-  /* 手机端只留一个「菜单」入口：其余功能收进底部抽屉，桌面完全不出现这些元素。 */
-  #nav-menu, #cam-reset, #menu-scrim, .menu-sheet-title { display:none; }
-  #nav-view, #nav-comrades, #nav-2d, #nav-home { display:none; }
+  /* 主界面只留一个「菜单」入口：其余功能收进抽屉，桌机与手机一致。 */
+  #cam-reset, #menu-scrim { display:none; }
+  .menu-sheet-title { display:flex; }
   .g3d-scrim { position:fixed; inset:0; z-index:44; background:rgba(8,7,5,.58);
     pointer-events:auto; -webkit-tap-highlight-color:transparent; }
   #menu-scrim.on { display:block; }
   .g3d-scrim.on { display:block; }
   #nav-menu {
+    display:inline-flex; margin-left:auto;
     align-items:center; justify-content:center; gap:4px; min-width:58px; height:44px;
     padding:0 9px; border:1px solid rgba(214,189,120,.55); border-radius:10px;
     background:rgba(20,19,15,.82); color:#f3e7ce; font:600 12px/1 var(--sans);
@@ -443,7 +459,7 @@
     #hud3d.on:not(.open) { display:none; }
     #g3d-topbar {
       position:fixed; left:8px; right:8px; z-index:45;
-      bottom:calc(10px + env(safe-area-inset-bottom));
+      top:auto; bottom:calc(10px + env(safe-area-inset-bottom));
       display:none; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px;
       width:auto; min-width:0; margin:0; padding:10px;
       border:1px solid rgba(182,172,147,.4); border-radius:12px;
@@ -610,7 +626,8 @@
     <div class="cover-actions">
       <button class="btn primary" id="enter">进入立体地图</button>
       <button class="btn ghost" id="cover-to-2d" type="button">切回平面行军</button>
-      <a class="cover-home" href="start.html">返回主入口</a>
+      <button class="btn ghost" id="cover-guide" type="button">先看新手引导</button>
+      <a class="cover-home" href="index.html">返回主入口</a>
     </div>
     <div class="note">
       七段地形连成一条红线，沿路是民房、驻扎地、关隘与渡口。<br>
@@ -629,7 +646,7 @@
         <span class="mode-tab active" aria-current="page"><i></i>立体长卷</span>
         <span class="mode-sync" title="两套地图共用同一份本地存档"><i></i>进度互通</span>
       </div>
-      <a class="g3d-hub" href="start.html">主入口</a>
+      <a class="g3d-hub" href="index.html">主入口</a>
     </div>
     <div id="hud3d">
       <div class="scene-head">
@@ -656,17 +673,21 @@
   <!-- 3D 玩法层：游戏3D 引擎所需容器（game3d.js 仅借用，不改 3D 渲染结构） -->
   <nav id="g3d-topbar" class="g3d-topbar">
     <span class="menu-sheet-title">功能菜单 <small>点空白处关闭</small></span>
+    <span class="menu-group-title">行军记录</span>
     <button id="nav-board">木牌</button>
     <button id="nav-wall">名单墙</button>
     <button id="nav-history">史料</button>
     <button id="nav-cards">行囊</button>
     <button id="nav-comrades">战友</button>
-    <button id="nav-help">手册</button>
     <button id="nav-memory">记忆</button>
-    <button id="nav-code">存档</button>
+    <span class="menu-group-title">规则与视图</span>
+    <button id="nav-help">手册</button>
+    <button id="nav-guide">新手引导</button>
     <button id="nav-view">视角</button>
+    <span class="menu-group-title">本机与入口</span>
+    <button id="nav-code">存档码</button>
     <button id="nav-2d">平面地图</button>
-    <a id="nav-home" href="start.html">主入口</a>
+    <a id="nav-home" href="index.html">主入口</a>
     <button id="reset-btn">清空存档</button>
   </nav>
   <div id="hud" class="g3d-hud"></div>
@@ -4183,7 +4204,7 @@ function bindEvents() {
     /* 双击/双触空白处 = 回正。手机上比在菜单里找「回正」快得多。 */
     if (wasTap) {
       const now = performance.now();
-      if (now - lastTap < 330 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 32) {
+      if (now - lastTap < 460 && Math.hypot(e.clientX - lastTapX, e.clientY - lastTapY) < 36) {
         resetView(); lastTap = 0;
       } else { lastTap = now; lastTapX = e.clientX; lastTapY = e.clientY; }
     }
@@ -4221,7 +4242,7 @@ const VoxelMap = {
        于是屋檐、瓦口、石阶这些一两像素宽的细边整片爬动，看着就是「墙在闪」。
        low 档已经靠 dpr 上限和粗 LOD 省了填充率，MSAA 的代价远小于闪烁的观感损失。 */
     const gl = S.canvas.getContext('webgl2', { antialias: true, preserveDrawingBuffer: true, alpha: false });
-    if (!gl) { err('当前浏览器 / 预览环境不支持 WebGL2，无法显示 3D 地图。请用 Chrome 或 Edge 直接双击打开本机文件 route3d.html；或改玩 2D 版 index.html（不依赖 WebGL）。'); this.dispose(); return false; }
+    if (!gl) { err('当前浏览器 / 预览环境不支持 WebGL2，无法显示 3D 地图。请用 Chrome 或 Edge 直接双击打开本机文件 route3d.html；或改玩 2D 版 map.html（不依赖 WebGL）。'); this.dispose(); return false; }
     S.gl = gl; gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     try {
       S.pr.main = program(gl, VS_MAIN, FS_MAIN);
@@ -4430,12 +4451,16 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'index.html?v=40&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=41&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
 if (switch2d) switch2d.addEventListener('click', go2D);
 if (cover2d) cover2d.addEventListener('click', go2D);
+var coverGuide = document.getElementById('cover-guide');
+if (coverGuide) coverGuide.addEventListener('click', function () {
+  if (window.Tutorial) Tutorial.open({ mode: '3d', from: 'cover' });
+});
 
 var toolsBtn = document.getElementById('btn-tools');
 if (toolsBtn) toolsBtn.addEventListener('click', () => {
@@ -4576,8 +4601,9 @@ if (typeof location !== 'undefined') {
 }
 })();
 </script>
-<script src="data.js?v=40"></script>
-<script src="game3d.js?v=40"></script>
+<script src="data.js?v=41"></script>
+<script src="game3d.js?v=41"></script>
+<script src="tutorial.js?v=41"></script>
 <script>
 (function () {
   var Q = location.search;

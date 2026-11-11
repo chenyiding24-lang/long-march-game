@@ -38,6 +38,7 @@ body {
 
 /* ---------- 顶栏 ---------- */
 #topbar {
+  position: relative;
   flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
   gap: 14px 18px; padding: 9px 20px; min-height: 58px;
   background:
@@ -45,7 +46,7 @@ body {
     linear-gradient(#1d1b17, #13110e);
   border-bottom: 1px solid #3a352c;
   box-shadow: 0 8px 24px rgba(0,0,0,.18);
-  z-index: 30; transition: opacity .2s, transform .2s;
+  z-index: 80; transition: opacity .2s, transform .2s;
 }
 .brand { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; min-width:0; }
 .brand-copy { display:flex; align-items:baseline; gap:12px; min-width:0; }
@@ -82,7 +83,42 @@ button.mode-tab:hover { color:#f2e7d2; background:rgba(255,255,255,.07); }
   font-family:var(--sans); font-size:9.5px; letter-spacing:.8px; color:#7f9c86; white-space:nowrap;
 }
 .mode-sync i { width:5px; height:5px; border-radius:50%; background:#79a987; box-shadow:0 0 0 3px rgba(121,169,135,.1); }
-#topnav { display: flex; align-items:center; gap: 1px; flex-wrap: wrap; margin-left:auto; justify-content:flex-end; }
+.top-actions { display:flex; align-items:center; gap:8px; margin-left:auto; }
+.menu-toggle {
+  display:inline-flex; align-items:center; gap:7px; min-height:34px; padding:5px 10px;
+  border:1px solid rgba(197,161,92,.34); border-radius:4px; background:rgba(197,161,92,.08);
+  color:#e8d6b2; font-family:var(--sans); font-size:12px; letter-spacing:1px; cursor:pointer;
+  transition:.18s; white-space:nowrap;
+}
+.menu-toggle b { font-size:15px; line-height:1; font-weight:400; }
+.menu-toggle:hover, .menu-toggle[aria-expanded="true"] { color:#fff3d8; background:rgba(140,59,46,.55); border-color:rgba(214,189,120,.62); }
+.navlink.guide { color:#e4c58d; border:1px solid rgba(197,161,92,.28); border-radius:999px; padding:5px 11px; }
+.navlink.guide:hover { color:#fff2d5; background:rgba(197,161,92,.12); }
+
+/* 顶栏只保留核心操作；记录、帮助、存档收进同一张功能单 */
+#topnav {
+  position:absolute; top:calc(100% + 8px); right:20px; z-index:70;
+  display:none; grid-template-columns:1fr; gap:12px;
+  width:min(430px, calc(100vw - 40px)); padding:15px 16px 16px;
+  border:1px solid rgba(182,172,147,.4); border-radius:8px;
+  background:linear-gradient(180deg, rgba(29,27,22,.99), rgba(17,16,13,.99));
+  box-shadow:0 22px 60px rgba(0,0,0,.58);
+}
+#topnav.open { display:grid; }
+.menu-sheet-title { display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding-bottom:9px; border-bottom:1px solid rgba(151,137,111,.2);
+  color:#e6d8bd; font-family:var(--sans); font-size:12px; letter-spacing:2px; }
+.menu-sheet-title small { color:#8f8776; font-size:10px; font-weight:400; letter-spacing:.8px; }
+.nav-group { display:grid; gap:5px; }
+.nav-group-title { font-family:var(--sans); font-size:9.5px; letter-spacing:2.2px; color:#918673; }
+.nav-group-links { display:flex; flex-wrap:wrap; gap:5px; }
+#topnav .navlink { min-height:38px; padding:7px 11px; border:1px solid rgba(151,137,111,.18);
+  border-radius:4px; background:rgba(255,255,255,.025); font-size:13px; }
+#topnav .navlink:hover { border-color:rgba(197,161,92,.3); background:rgba(255,255,255,.055); }
+#topnav .navlink.home { margin-left:0; border-color:rgba(197,161,92,.3); }
+.nav-scrim { position:fixed; inset:0; z-index:69; display:none; background:rgba(7,7,5,.5); }
+.nav-scrim.on { display:block; }
+body.menu-open #toast { opacity:0; }
 .navlink {
   font-family: var(--serif); font-size: 13.5px; letter-spacing: 1px;
   background: none; border: 0; border-radius:2px;
@@ -669,35 +705,38 @@ kbd { font-family: var(--sans); font-size: 11px; border: 1px solid #a2957a; bord
 @media (max-width: 1080px) {
   #hud { min-width: 200px; top: calc(var(--topbar-h) + 8px); right: 12px; padding: 10px; }
   .brand h1 { font-size: 17px; letter-spacing: 3px; }
-  #topnav .navlink { font-size: 12.5px; padding: 5px 6px; }
+  .brand-sub { display:none; }
   .hist-wrap { grid-template-columns: 1fr; } .hist-index { flex-direction: row; flex-wrap: wrap; border-right: 0; }
 }
 @media (max-width: 1220px) {
-  :root { --topbar-h: 102px; }
-  #topbar { align-items:flex-start; }
-  #topnav {
-    order:4; flex:1 0 100%; justify-content:flex-start; flex-wrap:nowrap;
-    overflow-x:auto; scrollbar-width:none; padding-top:2px;
-  }
-  #topnav::-webkit-scrollbar { display:none; }
+  #topbar { gap:10px 12px; }
+  .mode-tab { padding:5px 9px; }
 }
 @media (max-width: 760px) {
-  /* 顶栏收成两行：标题一行、导航一行横向滚，别把地图挤没 */
-  #topbar { flex-wrap: wrap; gap: 6px 12px; padding: 8px 12px; }
-  :root { --topbar-h: 0px; }
+  /* 顶栏两行：品牌 + 常用入口一行，模式切换单独一行。其余功能进底部菜单。 */
+  #topbar {
+    display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 10px;
+    padding:8px 12px 9px; align-items:center;
+  }
+  :root { --topbar-h: 104px; }
+  .brand { grid-column:1; grid-row:1; }
+  .top-actions { grid-column:2; grid-row:1; margin-left:0; }
   .brand h1 { font-size: 16px; letter-spacing: 3px; }
   .brand-sub { display: none; }
-  .mode-switch { margin-left:auto; }
+  .mode-switch { grid-column:1/-1; grid-row:2; justify-self:stretch; justify-content:center; margin:0; }
   .mode-sync { display:none; }
-  .mode-tab { min-height:34px; padding:4px 9px; font-size:11px; }
-  #topnav { order: 3; width: 100%; flex-wrap: nowrap; overflow-x: auto; gap: 0; scrollbar-width: none; }
-  #topnav::-webkit-scrollbar { display: none; }
-  .navlink { padding: 8px 10px; min-height: 42px; font-size: 13px; white-space: nowrap; }
-  /* 功能导航可横划，但「主入口」留在右缘，避免只露出半个字。 */
-  .navlink.home {
-    position: sticky; right: 0; z-index: 2; background: #13110e;
-    box-shadow: -12px 0 14px rgba(19,17,14,.92);
+  .mode-tab { min-height:34px; padding:4px 12px; font-size:11.5px; flex:1 1 0; justify-content:center; }
+  .navlink.guide { min-height:34px; padding:4px 10px; font-size:12px; }
+  .menu-toggle { min-height:34px; padding:4px 9px; }
+  #topnav {
+    position:fixed; left:8px; right:8px; bottom:calc(8px + env(safe-area-inset-bottom,0px)); top:auto;
+    width:auto; max-height:72vh; overflow:auto; z-index:45; gap:13px; padding:15px 14px;
+    border-radius:14px;
   }
+  .menu-sheet-title { padding-bottom:10px; }
+  #topnav .navlink { flex:1 1 auto; min-height:44px; padding:9px 12px; font-size:13.5px; }
+  .navlink { padding: 8px 10px; min-height: 42px; font-size: 13px; white-space: nowrap; }
+  #topnav .navlink.home { position:static; box-shadow:none; background:rgba(197,161,92,.06); }
 
   /* 页脚三行会吃掉地图高度：窄屏只留分级说明与名单，示意图声明回落到「规则手册」里 */
   #footbar { font-size: 10px; gap: 4px 14px; }

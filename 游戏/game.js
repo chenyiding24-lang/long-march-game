@@ -1235,12 +1235,49 @@ const Game = {
       const cbtn = document.createElement('button');
       cbtn.className = 'navlink'; cbtn.id = 'nav-council'; cbtn.textContent = '军帐议事';
       cbtn.addEventListener('click', () => Council.render());
-      const nav = $('#topnav'); if (nav) nav.appendChild(cbtn);
+      const nav = $('.nav-group-links') || $('#topnav'); if (nav) nav.appendChild(cbtn);
     }
-    /* V1：远望全图改用 F 键（不再劫持 Tab）；index.html 不可改，运行时同步提示文案 */
+    /* V1：远望全图改用 F 键（不再劫持 Tab）；页面提示在运行时同步 */
     const mn = document.querySelector('.map-note');
     if (mn) mn.textContent = mn.textContent.replace('Tab 远望全图', 'F 键远望全图');
     $('#notes-btn').addEventListener('click', () => Pages.notes());
+
+    /* 新手引导：顶栏常驻入口 + 功能菜单里的同一入口 */
+    document.querySelectorAll('[data-tutorial]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (window.Tutorial) Tutorial.open({ mode: '2d', from: 'game' });
+        else Toast.show('新手引导正在载入，请稍后再点一次');
+      });
+    });
+
+    /* 顶栏只留核心操作，行囊/木牌/史料等统一收进功能菜单 */
+    const menuBtn = $('#nav-menu-2d'), menu = $('#topnav'), scrim = $('#nav-scrim');
+    if (menuBtn && menu) {
+      const closeMenu = () => {
+        menu.classList.remove('open');
+        if (scrim) scrim.classList.remove('on');
+        document.body.classList.remove('menu-open');
+        menuBtn.setAttribute('aria-expanded', 'false');
+      };
+      const openMenu = () => {
+        menu.classList.add('open');
+        if (scrim) scrim.classList.add('on');
+        document.body.classList.add('menu-open');
+        menuBtn.setAttribute('aria-expanded', 'true');
+      };
+      menuBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        menu.classList.contains('open') ? closeMenu() : openMenu();
+      });
+      if (scrim) scrim.addEventListener('click', closeMenu);
+      menu.addEventListener('click', (ev) => {
+        if (ev.target.closest('button, a')) setTimeout(closeMenu, 0);
+      });
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape' && menu.classList.contains('open')) closeMenu();
+      });
+    }
+
     window.addEventListener('resize', () => Hud.fit());
     /* 下一站的两种点法：底部药丸 + 视口边缘箭头，都走同一套可达性判定 */
     $('#next-pill').addEventListener('click', () => this.goNext());
@@ -2132,7 +2169,7 @@ const Pages = {
       <h3>卡住了怎么办</h3>
       <ul>
         <li>点了没反应 → 只能走到与脚下<b>相连</b>的格子；不相邻的会提示，云里的先看不见。</li>
-        <li>忘了规则 → 顶栏「<b>规则手册</b>」写得很细。这页随时能重看：地图左下角那颗<b>朱红「须知」章</b>。</li>
+        <li>忘了规则 → 顶栏「<b>功能</b>」菜单里的「<b>规则手册</b>」写得很细；想一次看全全部玩法，点顶栏「<b>新手指南</b>」。这页也能随时重看：地图左下角那颗<b>朱红「须知」章</b>。</li>
       </ul>
       <p class="note-hint">部队打散<b>不是 Game Over</b>：收容队会把你接住，下一程接着走，木牌上的名字不清零。违纪也不立刻结算 —— 「多行不义必自毙」，那笔账延迟两三格才到，而那时你正好需要带路的人。</p>`,
       actions: [{ text: after ? '出发' : '回到地图', kind: 'primary' }]
@@ -2145,7 +2182,7 @@ const Pages = {
       html: `
       <h3>怎么玩</h3>
       <ul>
-        <li>在地图上<b>按住拖动</b>可以推地图（从节点上按住也能拖），滚轮缩放，按 <kbd>Tab</kbd> 或点右上「远望全图」看整条路线；视野外是阴云与飞雪。<b>触屏</b>：单指拖、<b>双指捏合缩放</b>（捏合时两指中点往哪走，地图就往哪推），格子的命中圈在触屏上会自动放大。</li>
+        <li>在地图上<b>按住拖动</b>可以推地图（从节点上按住也能拖），滚轮缩放，按 <kbd>F</kbd> 或点左下「远望全图」看整条路线；视野外是阴云与飞雪。<b>触屏</b>：单指拖、<b>双指捏合缩放</b>（捏合时两指中点往哪走，地图就往哪推），格子的命中圈在触屏上会自动放大。</li>
         <li>红圈呼吸的地方写着<b>你在这里</b>。套着<b>淡红虚线圈</b>的格子是这一步能踩的去向；其中<b>转着朱红圈、头顶写「▸ 下一站」</b>的那一格是主推的去向（大关卡优先）。三种点法都行：<b>点格子</b>、点地图左下角的<b>「下一站」药丸</b>、按<b>空格</b>；下一站跑出视野时，屏幕边上会亮起<b>红箭头</b>，点箭头同样过去。不相邻的点不动。</li>
         <li>事件分三档：<b>明</b>（图标写清类型，可预判）、<b>暗</b>（只显示 ?，走到才弹窗）、<b>动</b>（行进途中随机触发，10 类：敌袭、埋伏、老乡问路、疫病、逃兵、涨水、收容队、担架、断水、驮马）。同一类有好几种说法，<b>出没读过的先出</b>；一类一局最多两次，也不会跟上一格连着重复；刚出过事，下一格的概率还会压低。</li>
         <li>选项<b>不标价</b>：先按你的判断按下去。按完之后<b>不跳转</b> —— 选了的和没选的那几条，各自下面亮起资源增减，原地停几秒给你看（点任意处提前继续），再进结算。追兵翻倍、断粮饿倒、民族地区多绕的路，这些实际落账要下一页才对得上。</li>
