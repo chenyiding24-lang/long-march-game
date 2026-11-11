@@ -4551,7 +4551,7 @@ VoxelMap.on('nodePick', d => { if (VoxelMap.state.viewMode === 'near') placeEl.t
 if (typeof location !== 'undefined') {
   const Q = location.search;
   const mReg = /[?&]region=([a-z]+)/.exec(Q);
-  if (mReg && REGION_META.find(x => x.key === mReg[1])) { const r = REGION_META.find(x => x.key === mReg[1]); S.fly = { x: r.wx, z: r.wz, r: r.rWorld }; S.flyName = r.name; }
+  if (mReg && REGION_META.find(x => x.key === mReg[1])) { const r = REGION_META.find(x => x.key === mReg[1]); S.fly = { x: r.wx, z: r.wz, r: r.rWorld }; S.flyName = r.name; S.urlPin = true; }
   if (/[?&]view=near/.test(Q)) { S.viewMode = 'near'; }
   if (/[?&]view=overview/.test(Q)) { S.viewMode = 'overview'; }
   if (/[?&]still=1/.test(Q)) { S.speed = 0; S.intro = 7; }
