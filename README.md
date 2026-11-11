@@ -5,7 +5,8 @@
 
 **两种地图，一份进度**：`游戏/start.html` 并列提供「平面行军图」和「立体长卷」。进入任意一程后，可从顶栏随时切换，进度、资源、木牌、史料与名单墙都通过同一组 `localStorage` 存档同步。
 
-- **线上玩**：<https://dybfvs37.qwenwork.host/> —— 由**千问办公（qwenwork.cn）托管**，不在 Qoder Sites 控制面里，**本机没有该站凭据，不能从命令行发布**。更新方式：把 `游戏/` 8 个文件打成桌面交接包交千问办公同名覆盖站点根目录。线上旧版未同步本次双模式入口，发布前请把 `游戏/start.html` 设为首页。
+- **线上玩**：<https://long-march-game-a6v.pages.dev/> —— Cloudflare Pages，站点根目录就是 `游戏/`，从命令行一条 `wrangler pages deploy` 就能更新（见 §一 末）。想先选模式就用 <https://long-march-game-a6v.pages.dev/start.html>，直接开打就用不带后缀的根地址（落在平面行军图，顶栏随时能切立体长卷）。
+- **历史 V1**：<https://dybfvs37.qwenwork.host/> —— 由**千问办公（qwenwork.cn）托管**，不在 Qoder Sites 控制面里，**本机没有该站凭据，不能从命令行发布**，只留作旧版存档，不再更新。
 - **本地玩**：双击 `游戏/start.html`（主入口，平面 / 立体两种地图并列；零依赖，离线可用，进度存本机浏览器）
 - **技术形态**：纯静态前端，8 个文件、约 631 KB（另含 `art/` CG 约 2.9 MB），没有 npm、没有构建、没有后端、没有外链
 - **许可**：CC BY-NC-SA 4.0（见 `LICENSE`）—— 允许署名后做课堂展示、学习、二创，**不许商用**，改编必须以同一许可发布并说明改动
@@ -45,6 +46,22 @@
 node 测试/发布自检.js        # 15 项检查，退出码 0 = 可直接发布
 node 测试/data校验.js 游戏/data.js   # 游戏数据校验，应为 0 错误
 ```
+
+### 已经在线上跑的那一份：Cloudflare Pages
+
+2026-11-11 上线，项目名 `long-march-game`，正式域名 <https://long-march-game-a6v.pages.dev/>，站点根目录 = `游戏/`（31 个文件，含 `art/` 21 张 CG，共 3.6 MB）。改完东西要更新线上，只需：
+
+```bash
+node 测试/发布自检.js                 # 必须先过
+cd 游戏 && npx --yes wrangler pages deploy . --project-name long-march-game --commit-dirty=true
+```
+
+四条实测过的注意点：
+
+1. Pages 会把 `route3d.html` 用 **308** 规范化到 `/route3d`，查询串保留 —— 平面页里 `route3d.html?v=34&node=…` 那条深链照常能用，核验时别把 308 当成 404。
+2. 根路径 `/` 命中的是 `游戏/index.html`（平面行军图），**不是** `start.html`。要让 `start.html` 当首页，得往发布清单里加一个 `_redirects`，那就破坏了上面「只发这 8 个文件」的约定 —— 目前选择不加，两个入口分别给了链接，顶栏的「主入口」按钮也能回到选择页。
+3. 每次部署返回的 `哈希.long-march-game-a6v.pages.dev` 是这一次快照的预览域，正式域名始终不带哈希。`localStorage` 按 origin 隔离，本机 `file://` 的旧进度不会出现在线上，这是预期，别为此写同步逻辑。
+4. **这条不替代参赛要求**：Qoder 比赛要作品部署在魔搭创空间，pages.dev 只当演示与验收链接，创空间那条路见 `16-比赛版优化方案-v1.md` 第八节与 `部署/`。
 
 ---
 
