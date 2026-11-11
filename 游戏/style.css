@@ -164,6 +164,9 @@ body.modal-open .res-val { font-size: 16px; }
     radial-gradient(1200px 700px at 30% 20%, #2a251d, #16140f 70%),
     repeating-linear-gradient(58deg, rgba(255,255,255,.014) 0 2px, transparent 2px 7px);
   touch-action: none;
+  /* 拖地图会被浏览器当成框选文字，一路拖下来省名、江名、站名全糊上蓝色选中底色。
+     地图上的字是画面不是正文，整个视口禁选；史料正文在 #modal-root 里不受影响。 */
+  user-select: none; -webkit-user-select: none;
 }
 #viewport.grabbing { cursor: grabbing; }
 #map {

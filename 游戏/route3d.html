@@ -148,7 +148,7 @@
   .g3d-nav .nav-go:hover { background:rgba(140,59,46,.7); }
   .g3d-nav .dim { color:#8f8776; font-style:italic; }
 
-  .node-hits { position:absolute; inset:0; z-index:4; pointer-events:none; }
+  .node-hits { position:absolute; inset:0; z-index:4; pointer-events:none; user-select:none; -webkit-user-select:none; }
   .node-hit { position:absolute; transform:translate(-50%,-50%); width:20px; height:20px; border-radius:50%;
     border:2px solid rgba(230,220,196,.85); background:rgba(140,59,46,0); pointer-events:auto; cursor:pointer;
     padding:0; font-size:13px; line-height:1; color:#fff; text-shadow:0 1px 2px #000; }
@@ -4197,7 +4197,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'index.html?v=36&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'index.html?v=37&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4266,8 +4266,8 @@ if (typeof location !== 'undefined') {
 }
 })();
 </script>
-<script src="data.js?v=36"></script>
-<script src="game3d.js?v=36"></script>
+<script src="data.js?v=37"></script>
+<script src="game3d.js?v=37"></script>
 <script>
 (function () {
   var Q = location.search;

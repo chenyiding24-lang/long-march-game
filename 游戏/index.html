@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#26231f">
 <meta name="description" content="长征：万水千山 —— 平面行军图，与立体长卷共用同一局进度。">
 <title>长征：万水千山 · 平面行军</title>
-<link rel="icon" href="favicon.svg?v=36" type="image/svg+xml">
-<link rel="stylesheet" href="style.css?v=36">
+<link rel="icon" href="favicon.svg?v=37" type="image/svg+xml">
+<link rel="stylesheet" href="style.css?v=37">
 </head>
 <body>
 <a class="skip" href="#viewport">跳到地图</a>
@@ -88,8 +88,8 @@
   </footer>
 </div>
 
-<script src="data.js?v=36"></script>
-<script src="game.js?v=36"></script>
+<script src="data.js?v=37"></script>
+<script src="game.js?v=37"></script>
 <script>
 /* 平面 → 立体：先把当前状态落盘，再带着所在节点跳到 3D。
    两套地图共用 cwqs_save_v1，回来后也从同一节点继续。 */
@@ -106,7 +106,7 @@ document.addEventListener('DOMContentLoaded', function () {
       var raw = localStorage.getItem('cwqs_save_v1');
       at = raw ? (JSON.parse(raw) || {}).at : null;
     } catch (e) {}
-    location.href = 'route3d.html?v=36&play=1&from=2d' + (at ? '&node=' + encodeURIComponent(at) : '');
+    location.href = 'route3d.html?v=37&play=1&from=2d' + (at ? '&node=' + encodeURIComponent(at) : '');
   }
   if (btn) btn.addEventListener('click', go3d);
 
