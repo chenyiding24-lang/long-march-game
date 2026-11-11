@@ -1207,6 +1207,12 @@
       NODES3D_SAFE.forEach(n => {
         const p = this.vmap.project(n.x, n.z, n.h || 6);
         if (!p || !p.visible) return;
+        /* 远出视口的热区不要落到 DOM 上：绝对定位的离屏按钮会把手机布局视口撑宽，
+           固定定位的移动键随即被挤到屏幕外。舞台另有一层 overflow 裁切兜底。 */
+        const host = doc.getElementById('stage');
+        const vw = (host && host.clientWidth) || window.innerWidth || 390;
+        const vh = (host && host.clientHeight) || window.innerHeight || 844;
+        if (p.x < -46 || p.x > vw + 46 || p.y < -46 || p.y > vh + 46) return;
         const isCur = n.id === cur;
         const reach = (ADJ[cur] || new Set()).has(n.id) && Game.reachable(n.id);
         if (!isCur && !reach) return;            /* 只亮当前 + 相邻可走格，避免热区糊屏 */

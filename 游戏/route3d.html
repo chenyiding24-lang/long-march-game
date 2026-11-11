@@ -13,7 +13,8 @@
   * { box-sizing:border-box; }
   html,body { margin:0; width:100%; height:100%; overflow:hidden; background:#17150f; color:var(--paper);
     font-family:"Songti SC","SimSun",serif; }
-  #stage { position:absolute; inset:0; }
+  /* 3D 舞台自己裁掉投影到屏外的热区/路线，避免绝对定位子元素撑大移动端布局视口。 */
+  #stage { position:absolute; inset:0; overflow:hidden; }
   #stage canvas { display:block; width:100%; height:100%; touch-action:none; cursor:grab; }
   #route-overlay { position:absolute; inset:0; z-index:3; width:100%; height:100%; pointer-events:none; display:none; }
   #cover { position:absolute; inset:0; display:flex; flex-direction:column; justify-content:center;
@@ -551,7 +552,7 @@
     pointer-events:none; touch-action:none;
     user-select:none; -webkit-user-select:none;
   }
-  @media (pointer:coarse) { body.entered #touch-pad { display:block; } }
+  @media (pointer:coarse) { body.entered.roaming #touch-pad { display:block; } }
   #move-pad {
     position:absolute; left:12px; bottom:calc(104px + env(safe-area-inset-bottom));
     width:150px; height:150px; display:grid;
@@ -4104,6 +4105,12 @@ function camZoom(dir) {
 }
 /* 回正：无论玩家把镜头拖到哪、缩到多近，都回到「跟着当前部队」的默认构图。
    双击地图与右下角「回正」按钮共用这一处。 */
+function syncRoamUI() {
+  const on = !!S.free;
+  document.body.classList.toggle('roaming', on);
+  const tp = document.getElementById('touch-pad');
+  if (tp) tp.setAttribute('aria-hidden', on ? 'false' : 'true');
+}
 function resetView() {
   S.viewMode = 'near';
   const vb = document.getElementById('btn-view'); if (vb) vb.textContent = '视角：俯瞰';
@@ -4111,6 +4118,7 @@ function resetView() {
   const tp = document.getElementById('touch-pad'); if (tp) tp.querySelectorAll('.press').forEach(b => b.classList.remove('press'));
   S.lookYaw = 0; S.lookPitch = -.35; S.nearZoom = 1;
   S.free = false; S.freeFocus = null; S.freeYaw = 0; S.freePitch = .62; S.freeDist = 120;
+  syncRoamUI();
   const bf = document.getElementById('btn-free'); if (bf) bf.textContent = '漫游：关';
   if (placeEl) placeEl.textContent = '';
 }
@@ -4139,10 +4147,11 @@ function bindEvents() {
       const [a, b] = two();
       const d = dist(a, b);
       const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-      if (S.free) { S.freeDist = clamp(S.freeDist * (d / pinchPrev), 30, 600); }
+      /* 双指张开 = 拉近：距离倍率要取反，和手机地图/相机的直觉一致。 */
+      if (S.free) { S.freeDist = clamp(S.freeDist * (pinchPrev / d), 30, 600); }
       else {
         /* 跟随态：捏合只缩放机位距离；行军永远只由「点金色地名 / 下一站」触发。 */
-        S.nearZoom = clamp((S.nearZoom || 1) * (d / pinchPrev), .55, 2.2);
+        S.nearZoom = clamp((S.nearZoom || 1) * (pinchPrev / d), .55, 2.2);
       }
       pinchPrev = d; pmid = m;
       return;
@@ -4233,6 +4242,7 @@ const VoxelMap = {
     /* 图例默认收起，把画面让给地图与行军信息；点「图例」随时展开 */
     legendEl.classList.remove('on');
     document.body.classList.add('entered');
+    syncRoamUI();
     return true;
   },
   loadRegion(key) {                       /* 兼容旧接口：这里跳到某分段相机，不切数据 */
@@ -4244,6 +4254,7 @@ const VoxelMap = {
     ROUTE.forEach((r, k) => { const d = Math.hypot(r[0] - n.x, r[1] - n.z); if (d < bd) { bd = d; bestU = k / (ROUTE.length - 1); } });
     /* 行军/点站时把镜头交还给部队：玩家刚用方向键漫游过，也不该错过下一站。 */
     S.free = false; S.freeFocus = null;
+    syncRoamUI();
     const bf = document.getElementById('btn-free'); if (bf) bf.textContent = '漫游：关';
     S.tween = { from: S.uPos, to: bestU, t0: performance.now() };
     return true;
@@ -4403,7 +4414,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'index.html?v=38&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'index.html?v=39&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4425,7 +4436,9 @@ $('#btn-view').addEventListener('click', e => {
 });
 $('#btn-free').addEventListener('click', e => {
   S.free = !S.free;
-  if (S.free) { S.freeFocus = null; e.currentTarget.textContent = '漫游：开'; err(TOUCH_3D ? '自由漫游：左下前后左右移动，右下上升/下降；双指捏合缩放，单指拖动看四周；中心「回正」回到部队' : '自由漫游：拖拽转头/俯仰，滚轮缩放；WASD / 方向键 平移，Q 下降 / E 上升'); }
+  syncRoamUI();
+  if (S.free) { S.freeFocus = null; e.currentTarget.textContent = '漫游：开';
+    try { if (window.Game3D_Engine) Game3D_Engine.Toast.show(TOUCH_3D ? '漫游：左下移动 · 右下升降 · 双指缩放' : '漫游：WASD 平移 · Q/E 升降 · 滚轮缩放'); } catch (ignore) {} }
   else { e.currentTarget.textContent = '漫游：关'; S.lookYaw = 0; S.lookPitch = -.35; }
 });
 $('#btn-legend').addEventListener('click', () => legendEl.classList.toggle('on'));
@@ -4547,8 +4560,8 @@ if (typeof location !== 'undefined') {
 }
 })();
 </script>
-<script src="data.js?v=38"></script>
-<script src="game3d.js?v=38"></script>
+<script src="data.js?v=39"></script>
+<script src="game3d.js?v=39"></script>
 <script>
 (function () {
   var Q = location.search;
