@@ -490,6 +490,27 @@
     .g3d-nav .nav-go { padding:5px 9px; font-size:12px; }
     #meta { white-space:nowrap; }
   }
+
+  /* ---------- 触屏机位盘（手机没有键盘，也没有滚轮）----------
+     只在粗指针设备且已进入 3D 后出现；键鼠桌面上 display:none，等于不存在，
+     所以 JS 那边照常挂监听，不必再按设备分支写两套代码。 */
+  #touch-pad {
+    position:fixed; right:10px; top:50%; transform:translateY(-50%); z-index:6;
+    display:none; flex-direction:column; align-items:flex-end; gap:7px;
+    touch-action:none; user-select:none; -webkit-user-select:none;
+  }
+  @media (pointer:coarse) { body.entered #touch-pad { display:flex; } }
+  #touch-pad .tp-row { display:flex; gap:6px; }
+  #touch-pad .tp-sq { display:grid; grid-template-columns:repeat(2,42px); gap:6px; }
+  #touch-pad button {
+    width:42px; height:42px; display:grid; place-items:center; padding:0;
+    border:1px solid rgba(230,220,196,.34); border-radius:10px;
+    background:rgba(23,21,15,.66); color:var(--paper);
+    font:600 15px/1 system-ui,sans-serif; -webkit-tap-highlight-color:transparent;
+  }
+  #touch-pad button.press { background:var(--red); border-color:#fff3d6; }
+  #touch-pad .tp-fold { width:auto; height:25px; padding:0 12px; font-size:11px; letter-spacing:2px; opacity:.82; }
+  #touch-pad.min .tp-foldable { display:none; }
 </style>
 </head>
 <body>
@@ -572,6 +593,27 @@
     <div id="hand-tray" class="g3d-tray hand"></div>
   </div>
 </div>
+
+<!-- 触屏机位盘：手机上没有键盘，漫游平移/升降与缩放得靠按住的按钮；桌面靠 CSS 完全不显示这块 -->
+<div id="touch-pad" aria-label="触屏机位操作">
+  <button class="tp-fold" id="tp-fold" type="button" aria-expanded="true">操控</button>
+  <div class="tp-foldable">
+    <div class="tp-row"><button type="button" data-k="w" aria-label="向前移">▲</button></div>
+    <div class="tp-row">
+      <button type="button" data-k="a" aria-label="向左移">◀</button>
+      <button type="button" data-k="reset" aria-label="机位复位">◎</button>
+      <button type="button" data-k="d" aria-label="向右移">▶</button>
+    </div>
+    <div class="tp-row"><button type="button" data-k="s" aria-label="向后移">▼</button></div>
+  </div>
+  <div class="tp-sq tp-foldable">
+    <button type="button" data-z="-1" aria-label="拉近">＋</button>
+    <button type="button" data-z="1" aria-label="拉远">－</button>
+    <button type="button" data-k="e" aria-label="升高">↑</button>
+    <button type="button" data-k="q" aria-label="下降">↓</button>
+  </div>
+</div>
+
 <div id="modal-root"></div>
 
 <script type="application/json" id="map3d">
@@ -599,6 +641,11 @@ const routeOverlay = document.getElementById('route-overlay');
 let routeCtx = routeOverlay ? routeOverlay.getContext('2d') : null;
 let routeCssW = 0, routeCssH = 0;
 const err = m => { errBox.style.display = 'block'; errBox.textContent = m; console.error(m); };
+/* 触屏形态判定：手机/平板没有滚轮也没有键盘，操控盘与提示文案都按这个切换。
+   只做一次判断并缓存，matchMedia 在老 Safari 上没有也不报错。 */
+const TOUCH_3D = (() => {
+  try { return !!(window.matchMedia && matchMedia('(pointer:coarse)').matches); } catch (e) { return false; }
+})();
 
 /* ---------- 固定种子与噪声 ---------- */
 function mulberry32(a) { return function () {
@@ -3934,7 +3981,9 @@ function frame(now) {
     if (meta) meta.innerHTML = (S.flyName) + ' · ' + S.quality + ' 档　' + CHUNKS.size + ' 块 · ' + NXB + '×' + NZB + ' 网格<br>' +
       '绘制 ' + Math.round(verts / 3) + ' 面 · ' + S.fps + ' fps（本机浏览器，真机未测）' +
       (S.pend ? ' · 加载中 ' + S.pend : '') + '<br>' +
-      '拖动转头/俯仰 · 滚轮沿路或缩放 · 漫游时 WASD/方向键 平移、Q 下降/E 上升 · 下拉跳分段';
+      (TOUCH_3D
+        ? '单指转头/俯仰 · 双指捏合缩放、双指拖动沿路挪机位 · 右侧「操控盘」平移/升降 · 下拉跳分段'
+        : '拖动转头/俯仰 · 滚轮沿路或缩放 · 漫游时 WASD/方向键 平移、Q 下降/E 上升 · 下拉跳分段');
     /* G3 · 自适应降档看门狗：high 档连续 5 秒 <20fps（弱机/手机误选 high）自动转 low，保流畅 */
     if (S.quality === 'high' && S.intro > 3 && S.fps < 20) S.lowStreak = (S.lowStreak || 0) + 1; else S.lowStreak = 0;
     if (S.lowStreak >= 5) {
@@ -3956,22 +4005,68 @@ function resize() {
   S.canvas.height = Math.max(1, Math.floor(stage.clientHeight * d));
   syncOverlaySize();
 }
+/* 缩放只有一个动作，三个入口共用：滚轮、双指捏合、触屏盘的 ＋/－。
+   漫游态改机位距离，跟随态改沿路位置 uPos。dir<0 拉近、dir>0 拉远。 */
+function camZoom(dir) {
+  const s = dir < 0 ? -1 : 1;
+  if (S.free) S.freeDist = clamp(S.freeDist * (s > 0 ? 1.10 : 0.90), 30, 600);
+  else S.uPos = clamp(S.uPos - s * 0.012, 0, 1);
+}
+/* 双指拖动 = 漫游态平移注视点：手指拖着地面往哪走，注视点就往哪走（和地图拖动同手感）。
+   屏幕右向 = right、屏幕深处 = fwd；纵向位移换算成 fwd，横向换算成 right。
+   freeFocus 的钳制交给每帧的漫游分支，这里不重复算。 */
+function freePan(px, py) {
+  if (!S.freeFocus) return;
+  const k = S.freeDist * 0.0018;
+  const cy = Math.cos(S.freeYaw), sy = Math.sin(S.freeYaw);
+  const fwd = [sy, 0, cy], right = [-cy, 0, sy];
+  S.freeFocus[0] += (-right[0] * px + fwd[0] * py) * k;
+  S.freeFocus[2] += (-right[2] * px + fwd[2] * py) * k;
+}
 function bindEvents() {
   const c = S.canvas;
-  let dragging = false, lx = 0, ly = 0;
-  const down = e => { dragging = true; lx = e.clientX; ly = e.clientY; c.setPointerCapture && c.setPointerCapture(e.pointerId); };
+  /* 指针表：一根手指（鼠标）单指转头，两根手指捏合缩放 + 拖动平移。
+     手机上没有滚轮也没有键盘，双指就是这个页面唯一的缩放手段。 */
+  const pts = new Map();
+  let lx = 0, ly = 0, pinchPrev = 0, pmid = null;
+  const two = () => { const v = [...pts.values()]; return [v[0], v[1]]; };
+  const dist = (a, b) => Math.max(14, Math.hypot(a.x - b.x, a.y - b.y));
+  const down = e => {
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size === 2) {
+      const [a, b] = two();
+      pinchPrev = dist(a, b);
+      pmid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+    } else { lx = e.clientX; ly = e.clientY; }
+    try { c.setPointerCapture && c.setPointerCapture(e.pointerId); } catch (err) {}
+  };
   const move = e => {
-    if (!dragging) return;
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pts.size >= 2 && pinchPrev > 0 && pmid) {
+      const [a, b] = two();
+      const d = dist(a, b);
+      const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      if (S.free) { S.freeDist = clamp(S.freeDist * (d / pinchPrev), 30, 600); freePan(m.x - pmid.x, m.y - pmid.y); }
+      else {
+        /* 跟随态没有机位距离可缩：捏合与竖向拖动都算「沿路挪动」（改 uPos，和滚轮同一件事），横向拖动转头 */
+        S.uPos = clamp(S.uPos - (m.y - pmid.y) * 0.0009 + Math.log(d / pinchPrev) * 0.22, 0, 1);
+        S.lookYaw = clamp(S.lookYaw + (m.x - pmid.x) * 0.003, -1.4, 1.4);
+      }
+      pinchPrev = d; pmid = m;
+      return;
+    }
     const dx = e.clientX - lx, dy = e.clientY - ly; lx = e.clientX; ly = e.clientY;
     if (S.free) { S.freeYaw -= dx * 0.005; S.freePitch = clamp(S.freePitch + dy * 0.004, 0.05, 1.30); }
     else { S.lookYaw = clamp(S.lookYaw + dx * 0.004, -1.4, 1.4); S.lookPitch = clamp(S.lookPitch - dy * 0.004, -1.0, 1.05); }
   };
-  const up = () => { dragging = false; };
-  const wheel = e => {
-    e.preventDefault();
-    if (S.free) S.freeDist = clamp(S.freeDist * (e.deltaY > 0 ? 1.10 : 0.90), 30, 600);
-    else S.uPos = clamp(S.uPos - Math.sign(e.deltaY) * 0.012, 0, 1);
+  const up = e => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2) { pinchPrev = 0; pmid = null; }
+    /* 捏合抬起一根后，剩下那根接着当单指转头用，不能拿旧坐标算出天大的位移 */
+    if (pts.size === 1) { const rest = [...pts.values()][0]; lx = rest.x; ly = rest.y; }
   };
+  const wheel = e => { e.preventDefault(); camZoom(Math.sign(e.deltaY) || 1); };
   const kd = e => { (S.keys = S.keys || {})[e.key.toLowerCase()] = true; };
   const ku = e => { (S.keys = S.keys || {})[e.key.toLowerCase()] = false; };
   const onResize = () => resize();
@@ -4128,6 +4223,9 @@ const VoxelMap = {
     let v = 0; CHUNKS.forEach(c => { v += c.count; });
     return { inited: S.inited, quality: S.quality, paused: S.paused,
       uPos: S.uPos, speed: S.speed, tween: !!S.tween,
+      free: S.free, freeDist: Math.round(S.freeDist), lookYaw: +S.lookYaw.toFixed(3),
+      focus: S.freeFocus ? S.freeFocus.map(v => Math.round(v)) : null,
+      keys: Object.keys(S.keys || {}).filter(k => S.keys[k]),
       chunks: CHUNKS.size, grid: NXB + 'x' + NZB, vertices: v,
       fps: S.fps, weather: S.weather, viewMode: S.viewMode, pending: S.pend };
   }
@@ -4219,7 +4317,7 @@ $('#btn-view').addEventListener('click', e => {
 });
 $('#btn-free').addEventListener('click', e => {
   S.free = !S.free;
-  if (S.free) { S.freeFocus = null; e.currentTarget.textContent = '漫游：开'; err('自由漫游：拖拽转头/俯仰，滚轮缩放；WASD / 方向键 平移，Q 下降 / E 上升'); }
+  if (S.free) { S.freeFocus = null; e.currentTarget.textContent = '漫游：开'; err(TOUCH_3D ? '自由漫游：单指转头/俯仰，双指捏合缩放、双指拖动平移；或用右侧操控盘 ▲▼◀▶ 平移、↑↓ 升降' : '自由漫游：拖拽转头/俯仰，滚轮缩放；WASD / 方向键 平移，Q 下降 / E 上升'); }
   else { e.currentTarget.textContent = '漫游：关'; S.lookYaw = 0; S.lookPitch = -.35; }
 });
 $('#btn-legend').addEventListener('click', () => legendEl.classList.toggle('on'));
@@ -4236,6 +4334,52 @@ $('#btn-shot').addEventListener('click', () => {
   const a = document.createElement('a'); a.href = url; a.download = '万水千山-全线.png'; a.click();
 });
 $('#btn-exit').addEventListener('click', () => VoxelMap.dispose());
+
+/* ---------- 触屏机位盘：按住即动，松手即停 ----------
+   ▲▼◀▶↑↓ 走的是键盘那套 S.keys，帧循环照旧结算，不另开一条移动逻辑。
+   手机玩家多半不知道平移要先开漫游，所以按下移动键时若仍在跟随态，直接替他打开并说一声。
+   ＋/－ 与滚轮、双指捏合共用 camZoom，缩放只有一处算法，不会三个入口三种手感。 */
+(function bindTouchPad() {
+  const pad = document.getElementById('touch-pad');
+  if (!pad) return;
+  const fold = document.getElementById('tp-fold');
+  const KEYS = ['w', 'a', 's', 'd', 'e', 'q'];
+  const setKey = (k, on) => { (S.keys = S.keys || {})[k] = on; };
+  const letGo = () => { KEYS.forEach(k => setKey(k, false)); pad.querySelectorAll('.press').forEach(b => b.classList.remove('press')); };
+  try {
+    if (localStorage.getItem('cwqs_tp_fold_v1') === '1') { pad.classList.add('min'); fold.setAttribute('aria-expanded', 'false'); }
+  } catch (e) {}
+  fold.addEventListener('click', () => {
+    const min = pad.classList.toggle('min');
+    fold.setAttribute('aria-expanded', min ? 'false' : 'true');
+    try { localStorage.setItem('cwqs_tp_fold_v1', min ? '1' : '0'); } catch (e) {}
+  });
+  pad.querySelectorAll('button[data-k], button[data-z]').forEach(btn => {
+    const k = btn.getAttribute('data-k'), z = btn.getAttribute('data-z');
+    let repeat = null;
+    const stop = () => {
+      if (repeat) clearInterval(repeat); repeat = null;
+      if (k && k !== 'reset') setKey(k, false);
+      btn.classList.remove('press');
+    };
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      btn.classList.add('press');
+      try { btn.setPointerCapture(e.pointerId); } catch (ignore) {}
+      if (k === 'reset') {
+        /* 把机位交还给部队：freeFocus 置空后，下一帧 freeInit 按当前 uPos 重建 */
+        S.freeFocus = null; S.lookYaw = 0; S.lookPitch = -.35; return;
+      }
+      if (z) { camZoom(+z); repeat = setInterval(() => camZoom(+z), 110); return; }
+      if (!S.free) { const bf = document.getElementById('btn-free'); if (bf) bf.click(); }
+      setKey(k, true);
+    });
+    ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(ev => btn.addEventListener(ev, stop));
+  });
+  /* 松手不一定落在按钮上（手指滑出、切后台、来电话），这几个兜底必须留 —— 漏一次相机就一直往前飞 */
+  window.addEventListener('blur', letGo);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) letGo(); });
+})();
 VoxelMap.on('nodePick', d => { if (VoxelMap.state.viewMode === 'near') placeEl.textContent = '经过 · ' + d.name; });
 
 /* URL 参数：?auto=1 自动进 3D；?region=KEY 飞到分段；?view=near 进近景；?u=0.5 定位到路线中途 */
