@@ -7,7 +7,7 @@
   'use strict';
   if (window.Tutorial) return;
 
-  var VERSION = '41';
+  var VERSION = '43';
   var SEEN_KEY = 'cwqs_tutorial_seen_v1';
   var STEPS = [
     {

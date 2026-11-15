@@ -1744,11 +1744,15 @@ function buildVoxelChunk(ix, iz, cell) {
       }
     }
   }
-  /* 地表点缀（仅 high）：草簇、碎石、近水芦苇、坡上孤石，让山地有"活着"的颗粒感。
-     旧版只有草簇/碎石两种；现在沿水边补芦苇、缓坡补灌丛、岩坡补孤石，层次更真。 */
-  if (S.quality === 'high' && lodTier < 2) {
+  /* 地表点缀：草簇、碎石、近水芦苇、坡上孤石，让山地有"活着"的颗粒感。
+     low 档也要保留草簇 —— 以前整段裁掉，手机/自动降档后近景草地直接变秃，
+     玩家截图里只剩灰黄坡面。low 档只把密度稍减，仍能铺出草甸，不会明显拖帧。 */
+  if (lodTier < 2) {
     const sr = mulberry32((Math.imul(ix, 2246822519) ^ Math.imul(iz, 374761393)) >>> 0);
-    const dnum = 24;
+    /* 近块把草簇铺密：单块 76.8 宽，少量随机点根本铺不出草甸，近看仍是秃坡。
+       近块 160/140，中块 50/36；远块不铺。草簇只是小方盒，几何量仍在可接受范围。 */
+    const dnum = lodTier === 0 ? (S.quality === 'high' ? 160 : 140)
+                              : (S.quality === 'high' ? 50 : 36);
     for (let t = 0; t < dnum; t++) {
       const i = Math.floor(sr() * n), j = Math.floor(sr() * n);
       const x = bx + (i + .5) * step, z = bz + (j + .5) * step;
@@ -1773,8 +1777,8 @@ function buildVoxelChunk(ix, iz, cell) {
       /* 草甸/碎石/灌丛按地域配比：草地多草、黄土多岩少草、森林段均衡（数据驱动，便于微调） */
       const r0 = sr();
       const gm = .42 * vv.meadow, rm = gm + .30 * vv.rubble, sm = rm + .24 * vv.scrub;
-      if (r0 < gm) { const gy = h + .04, s = .5 + sr() * .6;     /* 草簇 */
-        vhbox(x - s, gy, z - s, x + s, gy + .5 + sr() * .8, z + s, [.30 + sr() * .1, .40 + sr() * .1, .22 + sr() * .06], .9);
+      if (r0 < gm) { const gy = h + .04, s = .7 + sr() * .8;     /* 草簇 */
+        vhbox(x - s, gy, z - s, x + s, gy + .6 + sr() * .9, z + s, [.28 + sr() * .1, .39 + sr() * .1, .19 + sr() * .06], .9);
       } else if (r0 < rm) { const gy = h + .02, s = .35 + sr() * .5;  /* 碎石 */
         vhbox(x - s, gy, z - s, x + s, gy + .25 + sr() * .35, z + s,
           [b.rock[0] * (.9 + sr() * .2), b.rock[1] * (.9 + sr() * .2), b.rock[2] * (.9 + sr() * .2)], .9);
@@ -2570,8 +2574,12 @@ function buildMarsh() {
     lv = H[k] + (lv - H[k]) * fade;
     /* 只有真正陡的山腰（坡度很大）才把水位压到地面下，防止水横切山坡；
        草地是缓坡丘陵，阈值放宽很多，缓坡上照常有水 —— 否则整片草地被误判成"陡"而干涸。 */
-    const steep = clamp((SLOPE[k] - .55) / .55, 0, 1);
-    lv = lv + (H[k] - .3 - lv) * steep;
+    /* 只有真正陡的山崖才把水位压回地面 —— 旧阈值 .55 太敏感，
+       草地区块本身是 45~97 的丘陵，大半格子的坡度都过线，水位被整齐压到 H-.3，
+       整片水沉到地下、被不透明地形盖死，俯瞰时几乎看不见水面。
+       阈值放到 1.1（约 48° 以上才算陡），落点改成贴地 +0.05，水再也不往地下钻。 */
+    const steep = clamp((SLOPE[k] - 1.1) / 1.1, 0, 1);
+    lv = lv + (H[k] + .05 - lv) * steep;
     /* —— 水中间必须长草 ——
        整片平铺到底的水面不像沼泽，像一张灰塑料布。用两段中频噪声在水位面上压出
        成片的草洲/浅滩：压得狠的地方地面探出水面，成为草甸和泥洲；压得浅的地方还是水，
@@ -2580,7 +2588,9 @@ function buildMarsh() {
     const X = x0 + i * sx, Z = z0 + j * sz;
     const isl = clamp((vn(X * .050 + 11.3, Z * .050 - 5.1) * .62
       + vn(X * .121 - 3.7, Z * .121 + 9.2) * .38 - .56) / .15, 0, 1);
-    lv = lv + (H[k] - .5 - lv) * isl;
+    /* 草洲只把水压成浅水（贴地 +0.03），不再压到地面下 —— 旧写法 H-.5 让"草洲"直接
+       变成"干地"，大片水面沉到地下；草该由草墩/草甸片从水里冒出来，而不是把水抽干。 */
+    lv = lv + (H[k] + .03 - lv) * isl;
     LVL[k] = lv;
   }
   const lvlAt = (X, Z) => {
@@ -3689,9 +3699,13 @@ function cameraAt(p, ease) {
        这就是"近景草地没草、漫游却有"的根因（漫游本来就是高位俯视）。
        草地段改用低机位、看近处、略俯视，让水草交错铺满画面。 */
     const grassLow = regionAt(invX(p[0]), invZ(p[1])) === 'grass';
-    const back = (portrait ? 86 : 76) * zoom;
-    const up = (grassLow ? (portrait ? 46 : 32) : (portrait ? 74 : 52)) * clamp(.70 + .30 * zoom, .70, 1.55);
-    const fwd = (grassLow ? (portrait ? 54 : 42) : (portrait ? 76 : 56)) * zoom;
+    /* 草地退回距离：后退 76 会退到更高的坡顶，站得太远看不到脚边水；
+       34 会贴住坡腰。取 56，站在坡肩上，配合下面的远视线看坡下草原。 */
+    const back = (grassLow ? (portrait ? 64 : 56) : (portrait ? 86 : 76)) * zoom;
+    const up = (grassLow ? (portrait ? 54 : 44) : (portrait ? 74 : 52)) * clamp(.70 + .30 * zoom, .70, 1.55);
+    /* 草地视线必须放远：路线大多走在 45~97 高的坡肩上，水泊躺在坡下洼地。
+       看 42 米只会停在坡面，水被坡挡住；看 120 米才越过坡顶、把坡下的水草收进画面。 */
+    const fwd = (grassLow ? (portrait ? 96 : 120) : (portrait ? 76 : 56)) * zoom;
     const bx = clamp(p[0] - tx * back, -HALFX + 6, HALFX - 6);
     const bz = clamp(p[1] - tz * back, -HALFZ + 6, HALFZ - 6);
     const nrx = -tz, nrz = tx;                  /* 右向量：横向取样，专门治"旁边的墙" */
@@ -3704,14 +3718,21 @@ function cameraAt(p, ease) {
       }
     }
     const boost = 12 * (1 - ease);
-    const eyeY = Math.max(sampleH(bx, bz) + up, maxNear + 9) + boost;
+    /* 机位高度：一般段落用扇形内最高地形 +9 兜底，防止镜头埋进山墙。
+       草地不能这么办 —— 草地区块里混着 300 高的雪峰（PEAKR.grass=300），
+       扇形扫到一角，镜头就被顶到一百多米高、平视远处灰雾，脚下的水泊全丢了。
+       草地改成贴着草面走，只留 14 的温和兜底，真正把人放到水草之间。 */
+    const baseY = sampleH(bx, bz) + up;
+    const eyeY = (grassLow ? Math.max(baseY, Math.min(maxNear + 9, baseY + 14))
+                           : Math.max(baseY, maxNear + 9)) + boost;
     const eye = [bx, eyeY, bz];
     const ax2 = clamp(p[0] + tx * fwd, -HALFX, HALFX), az2 = clamp(p[1] + tz * fwd, -HALFZ, HALFZ);
     const groundAt = sampleH(ax2, az2);
     /* 俯仰改成「视线仰角」：lookPitch>0 抬头看山与天，<0 低头看路。
        旧版 at 永远落在 eye 下方 46，只能往下看 —— 玩家反馈"只能左右转、不能上下看"。 */
     let elev = clamp(S.lookPitch - (portrait ? .19 : 0), -1.0, 1.0) * 0.62;
-    if (grassLow) elev -= 0.30 * clamp(1.2 - Math.max(0, S.lookPitch), 0, 1);  /* 草地默认多俯一点，水面才进画；抬头看天时自动让位 */
+    /* 草地视线压到约 -0.42 rad：坡肩上略俯，既能收进坡下水泊，又不会一路扎到脚下泥土 */
+    if (grassLow) elev -= 0.42 * clamp(1.2 - Math.max(0, S.lookPitch), 0, 1);
     let atY = eyeY + Math.tan(elev) * fwd;
     if (elev < 0) atY = Math.max(atY, groundAt + 3);
     atY = Math.min(atY, eyeY + 160);
@@ -3992,7 +4013,10 @@ function frame(now) {
      拉长后约 950，仍小于近景 farClip(≈1220)，最远处不会露出硬切边。 */
   const fog = over ? mix(wt.fog, [.74, .78, .82], .40)
                    : mix(wt.fog, [.66, .73, .80], inGrass ? .04 : .10);
-  const fogD = over ? 4200 : wt.fogD * (S.quality === 'low' ? .88 : 1.10) * (inGrass ? 2.6 : 1);
+  /* 近景雾距：过去 1.1 倍会把两三百步外的坡面压成灰黄，绿色草地和草簇一起被糊掉。
+     拉远到 1.5/1.7 倍，保留远处山体的空气透视，但脚边到中景的草色能透出来。
+     low 档只省几何，不再额外加重雾。 */
+  const fogD = over ? 4200 : wt.fogD * (S.quality === 'low' ? 1.70 : 1.50) * (inGrass ? 2.6 : 1);
   const fogY = over || inGrass ? -1e6 : 6;   /* 俯瞰/草地近景都关谷底云海，免得低洼水面被压成灰雾 */
 
   gl.viewport(0, 0, S.canvas.width, S.canvas.height);
@@ -4133,7 +4157,10 @@ function frame(now) {
       S.lowStreak = 0;
       const bq = document.getElementById('btn-quality'); if (bq) bq.textContent = '画质：low';
       VoxelMap.dispose(); VoxelMap.init({ mount: stage, quality: 'low' });
-      err('已自动切换到省电档（low）以保证流畅'); return;
+      /* 降档是保流畅的正常提示，不是页面错误：不要走 console.error，避免被回归脚本当成崩溃。 */
+      if (errBox) { errBox.style.display = 'block'; errBox.textContent = '已自动切换到省电档（low）以保证流畅'; }
+      console.warn('已自动切换到省电档（low）以保证流畅');
+      return;
     }
   }
   /* 每帧把 3D 节点投影成可点击热区（游戏3D 引擎） */
@@ -4469,7 +4496,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'map.html?v=42&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=43&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4627,9 +4654,9 @@ if (typeof location !== 'undefined') {
 }
 })();
 </script>
-<script src="data.js?v=42"></script>
-<script src="game3d.js?v=42"></script>
-<script src="tutorial.js?v=42"></script>
+<script src="data.js?v=43"></script>
+<script src="game3d.js?v=43"></script>
+<script src="tutorial.js?v=43"></script>
 <script>
 (function () {
   var Q = location.search;
