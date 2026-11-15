@@ -796,7 +796,8 @@ const invZ = wz => (wz + HALFZ) / WORLD_Y * SPAN_Y + Y0;
 const BIOME = {
   gan:   { name:'赣南·粤北丘陵', lo:[.24,.39,.20], hi:[.41,.53,.28], rock:[.44,.42,.36], snow:999 },
   xiang: { name:'湘桂走廊',     lo:[.17,.43,.31], hi:[.32,.55,.42], rock:[.54,.55,.50], snow:999 },
-  qian:  { name:'黔北·川南',     lo:[.44,.28,.18], hi:[.61,.41,.24], rock:[.49,.37,.30], snow:999 },
+  /* 黔北/通道—黎平是南方山地，不该整段黄土化；保留红壤露岩，但低地到山坡以草绿为主。 */
+  qian:  { name:'黔北·川南',     lo:[.25,.37,.18], hi:[.42,.51,.27], rock:[.48,.40,.30], snow:999 },
   chuan: { name:'川西高原',     lo:[.26,.31,.34], hi:[.44,.49,.50], rock:[.40,.42,.45], snow:56  },
   grass: { name:'若尔盖草地',   lo:[.30,.32,.21], hi:[.47,.44,.28], rock:[.38,.38,.30], snow:999 },
   min:   { name:'甘南·岷陇',     lo:[.24,.34,.28], hi:[.44,.48,.46], rock:[.45,.43,.45], snow:96  },
@@ -825,15 +826,17 @@ const WEATHER = {
            fogD:420, sat:.88, exp:1.0, cloud:.42, sunPos:[-.44,.30],
            snow:0,   wind:0,   pcol:[.88,.90,.92] },
   /* 湘桂·湘江血战：铅灰浓云 + 低角度血色天光 + 硝烟飞灰 */
-  xiang: { top:[.16,.17,.19], hor:[.38,.30,.26], fog:[.42,.38,.34],
-           sun:[.92,.48,.30], sky:[.31,.30,.32], light:[.60,.40,.44],
-           fogD:320, sat:.76, exp:.90, cloud:.98, sunPos:[-.52,.08],
-           snow:.30, wind:5.0, pcol:[.48,.45,.42] },
+  /* 湘江仍压低天色、保留硝烟，但不再用整片橙红光把地面染成土黄；
+     否则相邻的通道/黎平段近景草坡会被误看成“没草”。 */
+  xiang: { top:[.20,.22,.23], hor:[.42,.43,.41], fog:[.43,.46,.45],
+           sun:[.80,.76,.70], sky:[.33,.37,.38], light:[.50,.68,.50],
+           fogD:320, sat:.86, exp:.98, cloud:.88, sunPos:[-.52,.08],
+           snow:.30, wind:5.0, pcol:[.55,.55,.54] },
   /* 黔北·遵义/赤水：连绵冷雨、湿雾 */
-  qian:  { top:[.20,.23,.26], hor:[.38,.42,.43], fog:[.44,.48,.50],
-           sun:[.72,.76,.80], sky:[.33,.38,.43], light:[.40,.74,.46],
-           fogD:360, sat:.82, exp:.96, cloud:.86, sunPos:[-.30,.36],
-           snow:.22, wind:2.4, pcol:[.64,.70,.73] },
+  qian:  { top:[.23,.27,.27], hor:[.44,.49,.47], fog:[.46,.51,.49],
+           sun:[.76,.80,.80], sky:[.36,.42,.42], light:[.42,.72,.46],
+           fogD:360, sat:.90, exp:1.06, cloud:.74, sunPos:[-.30,.36],
+           snow:.22, wind:2.4, pcol:[.66,.72,.72] },
   /* 川西·夹金山：铅白云幕、白毛风、寒风横雪，远山溶进风雪里 */
   chuan: { top:[.34,.39,.44], hor:[.58,.63,.68], fog:[.56,.61,.66],
            sun:[.70,.78,.88], sky:[.46,.53,.62], light:[.36,.70,.52],
@@ -1621,7 +1624,7 @@ function emitSmoothSurf(HH, cn, bx, bz, step, ni, nj, colFn) {
 const VEG_TABLE = {
   gan:   { tree: 1.30, scrub: 0.55, meadow: 1.00, rubble: 0.55, snow: 999, treeTopFrac: 0.70 },
   xiang: { tree: 1.25, scrub: 0.55, meadow: 0.90, rubble: 0.55, snow: 999, treeTopFrac: 0.70 },
-  qian:  { tree: 0.70, scrub: 1.00, meadow: 0.40, rubble: 0.90, snow: 999, treeTopFrac: 0.62 },
+  qian:  { tree: 0.90, scrub: 1.00, meadow: 0.78, rubble: 0.72, snow: 999, treeTopFrac: 0.62 },
   chuan: { tree: 1.00, scrub: 0.55, meadow: 0.30, rubble: 1.05, snow: 56,  treeTopFrac: 0.60 },
   grass: { tree: 0.18, scrub: 0.45, meadow: 1.30, rubble: 0.40, snow: 999, treeTopFrac: 0.80 },
   min:   { tree: 0.45, scrub: 0.75, meadow: 0.50, rubble: 1.05, snow: 96,  treeTopFrac: 0.62 },
@@ -4503,7 +4506,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'map.html?v=44&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=45&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4661,9 +4664,9 @@ if (typeof location !== 'undefined') {
 }
 })();
 </script>
-<script src="data.js?v=44"></script>
-<script src="game3d.js?v=44"></script>
-<script src="tutorial.js?v=44"></script>
+<script src="data.js?v=45"></script>
+<script src="game3d.js?v=45"></script>
+<script src="tutorial.js?v=45"></script>
 <script>
 (function () {
   var Q = location.search;
