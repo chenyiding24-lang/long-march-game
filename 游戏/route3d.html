@@ -3684,15 +3684,22 @@ function cameraAt(p, ease) {
     /* 近景缩放：只改「退多远、抬多高、看多远」，不改 uPos。
        以前双指捏合会沿路线挪机位，玩家想拉近看一眼却走出了好几格。 */
     const zoom = clamp(S.nearZoom || 1, .55, 2.2);
+    /* 若尔盖草地是一马平川的低洼水泊：通用近景机位为了躲开远处山墙会把相机抬高、
+       再平视远方，结果画面里全是灰雾和地平线，脚下的水泊草墩一点看不见 ——
+       这就是"近景草地没草、漫游却有"的根因（漫游本来就是高位俯视）。
+       草地段改用低机位、看近处、略俯视，让水草交错铺满画面。 */
+    const grassLow = regionAt(invX(p[0]), invZ(p[1])) === 'grass';
     const back = (portrait ? 86 : 76) * zoom;
-    const up = (portrait ? 74 : 52) * clamp(.70 + .30 * zoom, .70, 1.55);
-    const fwd = (portrait ? 76 : 56) * zoom;
+    const up = (grassLow ? (portrait ? 46 : 32) : (portrait ? 74 : 52)) * clamp(.70 + .30 * zoom, .70, 1.55);
+    const fwd = (grassLow ? (portrait ? 54 : 42) : (portrait ? 76 : 56)) * zoom;
     const bx = clamp(p[0] - tx * back, -HALFX + 6, HALFX - 6);
     const bz = clamp(p[1] - tz * back, -HALFZ + 6, HALFZ - 6);
     const nrx = -tz, nrz = tx;                  /* 右向量：横向取样，专门治"旁边的墙" */
     let maxNear = sampleH(bx, bz);
-    for (let d = 0; d <= 90 * zoom; d += 15) {
-      for (let s = -54 * zoom; s <= 54 * zoom; s += 27) {
+    /* 草地扫的扇形收窄：低洼水面附近没有几百单位高的山墙，不必被远处任何凸起把机位顶飞 */
+    const scanD = grassLow ? 44 : 90, scanS = grassLow ? 27 : 54;
+    for (let d = 0; d <= scanD * zoom; d += 15) {
+      for (let s = -scanS * zoom; s <= scanS * zoom; s += 27) {
         maxNear = Math.max(maxNear, sampleH(bx + tx * d + nrx * s, bz + tz * d + nrz * s));
       }
     }
@@ -3703,7 +3710,8 @@ function cameraAt(p, ease) {
     const groundAt = sampleH(ax2, az2);
     /* 俯仰改成「视线仰角」：lookPitch>0 抬头看山与天，<0 低头看路。
        旧版 at 永远落在 eye 下方 46，只能往下看 —— 玩家反馈"只能左右转、不能上下看"。 */
-    const elev = clamp(S.lookPitch - (portrait ? .19 : 0), -1.0, 1.0) * 0.62;
+    let elev = clamp(S.lookPitch - (portrait ? .19 : 0), -1.0, 1.0) * 0.62;
+    if (grassLow) elev -= 0.30 * clamp(1.2 - Math.max(0, S.lookPitch), 0, 1);  /* 草地默认多俯一点，水面才进画；抬头看天时自动让位 */
     let atY = eyeY + Math.tan(elev) * fwd;
     if (elev < 0) atY = Math.max(atY, groundAt + 3);
     atY = Math.min(atY, eyeY + 160);
@@ -3973,9 +3981,19 @@ function frame(now) {
   const VP = mul(perspective(1.02, asp, 1.2, farClip), lookAt(S.eye, S.at, [0, 1, 0]));
   S.VP = VP;   /* 供 game3d.js 的 Game3D._tick 投影 3D 节点到屏幕（与 uVP 完全一致） */
   /* 远景带一点青蓝空气透视（中式山水味道），同时比旧版更亮更通透 */
-  const fog = over ? mix(wt.fog, [.74, .78, .82], .40) : mix(wt.fog, [.62, .70, .80], .16);
-  const fogD = over ? 4200 : wt.fogD * (S.quality === 'low' ? .88 : 1.10);
-  const fogY = over ? -1e6 : 6;   /* 俯瞰关掉谷底云海，免得全景被压成灰雾 */
+  /* 若尔盖草地是低洼水泊，玩家沿路线贴地穿行时天候 wtT≈0.22。
+     以前近景不论在哪都套一层 fogY=6 的谷底云海：草地水面只比地面高一点点，
+     全落在雾面以下，绿草墩被压成灰白一片 —— 看着就像"近景草没了"。
+     俯瞰早已关掉云海；这里让近景的草地段也关掉，并把雾距拉远，水草才能透出来。 */
+  const inGrass = !over && regionAt(invX(p[0]), invZ(p[1])) === 'grass';
+  /* 近景过去用 wt.fogD*1.1（约 360~400）当雾距：两百步外的地表就压了三四成雾，
+     草点、水泊、岸线全被糊成一片灰白 —— 玩家看到的"近景草地没了"大半是这层雾。
+     只把草地段的雾距拉长到和视野匹配（其余段落保持原观感，零回归）；
+     拉长后约 950，仍小于近景 farClip(≈1220)，最远处不会露出硬切边。 */
+  const fog = over ? mix(wt.fog, [.74, .78, .82], .40)
+                   : mix(wt.fog, [.66, .73, .80], inGrass ? .04 : .10);
+  const fogD = over ? 4200 : wt.fogD * (S.quality === 'low' ? .88 : 1.10) * (inGrass ? 2.6 : 1);
+  const fogY = over || inGrass ? -1e6 : 6;   /* 俯瞰/草地近景都关谷底云海，免得低洼水面被压成灰雾 */
 
   gl.viewport(0, 0, S.canvas.width, S.canvas.height);
   gl.clearColor(fog[0], fog[1], fog[2], 1);
@@ -4451,7 +4469,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'map.html?v=41&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=42&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4530,8 +4548,16 @@ $('#btn-exit').addEventListener('click', () => VoxelMap.dispose());
   const viewBtn = document.getElementById('nav-view');
   if (viewBtn) viewBtn.addEventListener('click', () => {
     close();
+    /* 视角面板自带不透明底，不再复用会盖住自己的 menu-scrim：
+       否则灰遮罩既压暗画面，又会吃掉第一次点击（面板按钮在它下面）。 */
     if (box) box.classList.add('open');
-    if (scrim) scrim.classList.add('on');
+  });
+  /* 「点空白处关闭」：点面板、菜单按钮、抽屉以外的区域即收起视角面板。
+     用 transparent 的语义关闭，而不是再加一层可见遮罩。 */
+  document.addEventListener('click', e => {
+    if (!box || !box.classList.contains('open')) return;
+    if (e.target.closest('#hud3d, #nav-menu, #g3d-topbar, #menu-scrim')) return;
+    box.classList.remove('open');
   });
   const twoDBtn = document.getElementById('nav-2d');
   if (twoDBtn) twoDBtn.addEventListener('click', go2D);
@@ -4601,9 +4627,9 @@ if (typeof location !== 'undefined') {
 }
 })();
 </script>
-<script src="data.js?v=41"></script>
-<script src="game3d.js?v=41"></script>
-<script src="tutorial.js?v=41"></script>
+<script src="data.js?v=42"></script>
+<script src="game3d.js?v=42"></script>
+<script src="tutorial.js?v=42"></script>
 <script>
 (function () {
   var Q = location.search;
