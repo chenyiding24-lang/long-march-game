@@ -1747,12 +1747,14 @@ function buildVoxelChunk(ix, iz, cell) {
   /* 地表点缀：草簇、碎石、近水芦苇、坡上孤石，让山地有"活着"的颗粒感。
      low 档也要保留草簇 —— 以前整段裁掉，手机/自动降档后近景草地直接变秃，
      玩家截图里只剩灰黄坡面。low 档只把密度稍减，仍能铺出草甸，不会明显拖帧。 */
-  if (lodTier < 2) {
+  {
     const sr = mulberry32((Math.imul(ix, 2246822519) ^ Math.imul(iz, 374761393)) >>> 0);
     /* 近块把草簇铺密：单块 76.8 宽，少量随机点根本铺不出草甸，近看仍是秃坡。
-       近块 160/140，中块 50/36；远块不铺。草簇只是小方盒，几何量仍在可接受范围。 */
+       近块 160/140，中块 50/36，远块 20/12；草簇只是小方盒，几何量仍在可接受范围。
+       远块也必须铺：漫游拉高后看到的大片坡面全在远块，以前这里是秃的。 */
     const dnum = lodTier === 0 ? (S.quality === 'high' ? 160 : 140)
-                              : (S.quality === 'high' ? 50 : 36);
+               : lodTier === 1 ? (S.quality === 'high' ? 50 : 36)
+                               : (S.quality === 'high' ? 20 : 12);
     for (let t = 0; t < dnum; t++) {
       const i = Math.floor(sr() * n), j = Math.floor(sr() * n);
       const x = bx + (i + .5) * step, z = bz + (j + .5) * step;
@@ -4011,13 +4013,18 @@ function frame(now) {
      草点、水泊、岸线全被糊成一片灰白 —— 玩家看到的"近景草地没了"大半是这层雾。
      只把草地段的雾距拉长到和视野匹配（其余段落保持原观感，零回归）；
      拉长后约 950，仍小于近景 farClip(≈1220)，最远处不会露出硬切边。 */
-  const fog = over ? mix(wt.fog, [.74, .78, .82], .40)
-                   : mix(wt.fog, [.66, .73, .80], inGrass ? .04 : .10);
+  /* 漫游是高位探索视角，和俯瞰一样要看清整片地形；不能沿用贴地近景的浓雾，
+     否则草地、水泊、远块草甸全被压成灰黄。 */
+  const freeView = S.free;
+  const clearView = over || freeView;
+  const fog = clearView ? mix(wt.fog, [.74, .78, .82], .40)
+                        : mix(wt.fog, [.66, .73, .80], inGrass ? .04 : .10);
   /* 近景雾距：过去 1.1 倍会把两三百步外的坡面压成灰黄，绿色草地和草簇一起被糊掉。
      拉远到 1.5/1.7 倍，保留远处山体的空气透视，但脚边到中景的草色能透出来。
      low 档只省几何，不再额外加重雾。 */
-  const fogD = over ? 4200 : wt.fogD * (S.quality === 'low' ? 1.70 : 1.50) * (inGrass ? 2.6 : 1);
-  const fogY = over || inGrass ? -1e6 : 6;   /* 俯瞰/草地近景都关谷底云海，免得低洼水面被压成灰雾 */
+  const fogD = over ? 4200 : freeView ? 3000
+             : wt.fogD * (S.quality === 'low' ? 1.70 : 1.50) * (inGrass ? 2.6 : 1);
+  const fogY = over || freeView || inGrass ? -1e6 : 6;   /* 俯瞰/漫游/草地近景都关谷底云海，免得远处坡面被压成灰雾 */
 
   gl.viewport(0, 0, S.canvas.width, S.canvas.height);
   gl.clearColor(fog[0], fog[1], fog[2], 1);
@@ -4496,7 +4503,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'map.html?v=43&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=44&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4654,9 +4661,9 @@ if (typeof location !== 'undefined') {
 }
 })();
 </script>
-<script src="data.js?v=43"></script>
-<script src="game3d.js?v=43"></script>
-<script src="tutorial.js?v=43"></script>
+<script src="data.js?v=44"></script>
+<script src="game3d.js?v=44"></script>
+<script src="tutorial.js?v=44"></script>
 <script>
 (function () {
   var Q = location.search;
