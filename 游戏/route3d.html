@@ -4000,7 +4000,13 @@ function frame(now) {
 
   /* 分块：只维护相机周围，每帧 14ms 预算，前进时慢慢补 —— 「雾里逐步浮现」就是这么来的。
      俯瞰时整图已由 FAR 一支网格兜底，不必再为全景铺几千细块。 */
-  if (!over) S.pend = updateChunks(S.eye[0], S.eye[2], 14);
+  /* 漫游时按焦点加载，而不是按相机位置：相机拉高/拉远后，眼睛已经退到山外，
+     真正看的焦点区却可能落在 560 的加载半径之外，于是只剩远景底色、看不到草。
+     以 freeFocus 为中心铺块，焦点周围的水草和草甸才会始终存在。 */
+  const chunkCenter = (S.free && S.freeFocus)
+    ? [(S.eye[0] + S.freeFocus[0]) * .5, 0, (S.eye[2] + S.freeFocus[2]) * .5]
+    : S.eye;
+  if (!over) S.pend = updateChunks(chunkCenter[0], chunkCenter[2], 14);
 
   const asp = S.canvas.width / Math.max(1, S.canvas.height);
   const farClip = over ? 4400 : VIEW_FAR + 700;
@@ -4070,6 +4076,13 @@ function frame(now) {
   if (over && FAR.vao) {                       /* 俯瞰：整图一块远景网格 */
     gl.bindVertexArray(FAR.vao); gl.drawArrays(gl.TRIANGLES, 0, FAR.count); verts += FAR.count;
   } else {
+    /* 漫游拉远后，焦点周围仍有细分块，但相机与焦点之间可能超出 560 的加载半径。
+       先用整图远景网格垫底（深度稍微后推，细块仍会盖住它），避免出现一块方形断崖。 */
+    if (S.free && FAR.vao) {
+      gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(2, 2);
+      gl.bindVertexArray(FAR.vao); gl.drawArrays(gl.TRIANGLES, 0, FAR.count); verts += FAR.count;
+      gl.disable(gl.POLYGON_OFFSET_FILL);
+    }
     for (const c of CHUNKS.values()) {
       /* 视锥粗剔除：相机背后 40 度以外的块不画 */
       const vx = c.cx - eyex, vz = c.cz - eyez;
@@ -4189,7 +4202,8 @@ function resize() {
    两种视角都只改机位距离，不再改 uPos —— 拉近看路不等于往前行军。dir<0 拉近、dir>0 拉远。 */
 function camZoom(dir) {
   const s = dir < 0 ? -1 : 1;
-  if (S.free) S.freeDist = clamp(S.freeDist * (s > 0 ? 1.10 : 0.90), 30, 600);
+  /* 漫游最大后撤 360：再远会越过地形块加载半径，出现方形断崖；看全图请用「俯瞰」。 */
+  if (S.free) S.freeDist = clamp(S.freeDist * (s > 0 ? 1.10 : 0.90), 30, 360);
   else S.nearZoom = clamp((S.nearZoom || 1) * (s > 0 ? 1.12 : 0.89), .55, 2.2);
 }
 /* 回正：无论玩家把镜头拖到哪、缩到多近，都回到「跟着当前部队」的默认构图。
@@ -4237,7 +4251,7 @@ function bindEvents() {
       const d = dist(a, b);
       const m = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       /* 双指张开 = 拉近：距离倍率要取反，和手机地图/相机的直觉一致。 */
-      if (S.free) { S.freeDist = clamp(S.freeDist * (pinchPrev / d), 30, 600); }
+      if (S.free) { S.freeDist = clamp(S.freeDist * (pinchPrev / d), 30, 360); }
       else {
         /* 跟随态：捏合只缩放机位距离；行军永远只由「点金色地名 / 下一站」触发。 */
         S.nearZoom = clamp((S.nearZoom || 1) * (pinchPrev / d), .55, 2.2);
@@ -4506,7 +4520,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'map.html?v=46&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=47&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4667,7 +4681,7 @@ if (typeof location !== 'undefined') {
     const fx = clamp(parseFloat(mCam[1]), -HALFX + 24, HALFX - 24);
     const fz = clamp(parseFloat(mCam[2]), -HALFZ + 24, HALFZ - 24);
     S.freeFocus = [fx, sampleH(fx, fz) + 6, fz];
-    if (mCam[3]) S.freeDist = clamp(parseFloat(mCam[3]), 30, 600);
+    if (mCam[3]) S.freeDist = clamp(parseFloat(mCam[3]), 30, 360);
     if (mCam[4]) S.freePitch = clamp(parseFloat(mCam[4]), 0.05, 1.30);
     if (mCam[5] !== undefined) S.freeYaw = parseFloat(mCam[5]);
   }
@@ -4678,9 +4692,9 @@ if (typeof location !== 'undefined') {
 syncViewLabel();
 })();
 </script>
-<script src="data.js?v=46"></script>
-<script src="game3d.js?v=46"></script>
-<script src="tutorial.js?v=46"></script>
+<script src="data.js?v=47"></script>
+<script src="game3d.js?v=47"></script>
+<script src="tutorial.js?v=47"></script>
 <script>
 (function () {
   var Q = location.search;
