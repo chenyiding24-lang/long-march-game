@@ -4506,7 +4506,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'map.html?v=45&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=46&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4524,9 +4524,21 @@ if (toolsBtn) toolsBtn.addEventListener('click', () => {
   var open = box.classList.toggle('open');
   toolsBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
 });
+function syncViewLabel() {
+  const b = document.getElementById('btn-view');
+  if (b) b.textContent = '视角：' + (S.free ? '漫游' : (S.viewMode === 'near' ? '近景' : '俯瞰'));
+}
 $('#btn-view').addEventListener('click', e => {
-  S.viewMode = S.viewMode === 'near' ? 'overview' : 'near';
-  e.currentTarget.textContent = '视角：' + (S.viewMode === 'near' ? '近景' : '俯瞰');
+  /* 漫游是独立自由机位：这里必须先退出漫游，否则点「近景」镜头根本不会动，
+     玩家会误以为近景草地消失。退出后先回到跟随近景，再允许切俯瞰。 */
+  if (S.free) {
+    S.free = false; S.freeFocus = null; S.lookYaw = 0; S.lookPitch = -.35;
+    const bf = document.getElementById('btn-free'); if (bf) bf.textContent = '漫游：关';
+    syncRoamUI(); S.viewMode = 'near';
+  } else {
+    S.viewMode = S.viewMode === 'near' ? 'overview' : 'near';
+  }
+  syncViewLabel();
   S.intro = 0;
   if (S.viewMode === 'near') drawRouteOverlay(false);
 });
@@ -4536,6 +4548,7 @@ $('#btn-free').addEventListener('click', e => {
   if (S.free) { S.freeFocus = null; e.currentTarget.textContent = '漫游：开';
     try { if (window.Game3D_Engine) Game3D_Engine.Toast.show(TOUCH_3D ? '漫游：左下移动 · 右下升降 · 双指缩放' : '漫游：WASD 平移 · Q/E 升降 · 滚轮缩放'); } catch (ignore) {} }
   else { e.currentTarget.textContent = '漫游：关'; S.lookYaw = 0; S.lookPitch = -.35; }
+  syncViewLabel();
 });
 $('#btn-legend').addEventListener('click', () => legendEl.classList.toggle('on'));
 $('#btn-quality').addEventListener('click', e => {
@@ -4662,11 +4675,12 @@ if (typeof location !== 'undefined') {
   if (mNode) { const nn = NODES3D.find(x => x.id === mNode[1]); if (nn) { let bu = 0, bd = 1e9; ROUTE.forEach((r, k) => { const d = Math.hypot(r[0] - nn.x, r[1] - nn.z); if (d < bd) { bd = d; bu = k / (ROUTE.length - 1); } }); S.uPos = bu; S.tween = null; S.urlPin = true; } }
   /* 自动进入放在 game3d.js 加载之后，见页面末尾的启动脚本 */
 }
+syncViewLabel();
 })();
 </script>
-<script src="data.js?v=45"></script>
-<script src="game3d.js?v=45"></script>
-<script src="tutorial.js?v=45"></script>
+<script src="data.js?v=46"></script>
+<script src="game3d.js?v=46"></script>
+<script src="tutorial.js?v=46"></script>
 <script>
 (function () {
   var Q = location.search;
