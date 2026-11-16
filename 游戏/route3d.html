@@ -3936,7 +3936,29 @@ function drawRouteOverlay(over) {
   }
 }
 
+/* 续帧只允许有一个待执行的 rAF：先取消上一句柄再排。
+   自动降档那条路会 dispose()+init()，init 自己排一次帧，若这里不再取消就会出现两条循环。 */
+function nextFrame() {
+  if (S.raf) cancelAnimationFrame(S.raf);
+  S.raf = requestAnimationFrame(frame);
+}
+/* 外壳：任何一帧抛异常都不能再断掉 rAF 链。
+   以前 frame 里任何一行抛错（历史上真出过 freeFocus 为 null）都会让
+   requestAnimationFrame 链就此终止 —— 画面冻结、事件热区不再投影、
+   「下一站」点了像没反应，而且手机上没有任何提示，只能退出重进。 */
 function frame(now) {
+  if (!S.inited || S.paused) return;
+  try {
+    frameStep(now);
+  } catch (e) {
+    S.frameErrs = (S.frameErrs || 0) + 1;
+    if (S.frameErrs <= 2) err('3D 画面出错（已自动继续，第 ' + S.frameErrs + ' 次）：' + ((e && e.message) || e));
+    console.error(e);
+  }
+  if (S.inited && !S.paused) nextFrame();
+}
+
+function frameStep(now) {
   if (!S.inited || S.paused) return;
   const gl = S.gl, dt = Math.min(.05, (now - (S.last || now)) / 1000); S.last = now;
   S.orbit = (S.orbit || 0) + dt * 0.6;            /* 俯瞰缓慢自转，按 dt 推进，与帧率无关 */
@@ -4205,7 +4227,6 @@ function frame(now) {
   }
   /* 每帧把 3D 节点投影成可点击热区（游戏3D 引擎） */
   if (window.Game3D && window.Game3D.vmap && window.Game3D._tick) { try { window.Game3D._tick(); } catch (e) {} }
-  S.raf = requestAnimationFrame(frame);
 }
 
 function resize() {
@@ -4537,7 +4558,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'map.html?v=48&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=49&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4709,9 +4730,9 @@ if (typeof location !== 'undefined') {
 syncViewLabel();
 })();
 </script>
-<script src="data.js?v=48"></script>
-<script src="game3d.js?v=48"></script>
-<script src="tutorial.js?v=48"></script>
+<script src="data.js?v=49"></script>
+<script src="game3d.js?v=49"></script>
+<script src="tutorial.js?v=49"></script>
 <script>
 (function () {
   var Q = location.search;

@@ -334,10 +334,19 @@
     curOpts: null,
 
     boot() {
-      Store.load();
-      Hud.build();
-      this.bindChrome();
-      Hud.render();
+      /* 逐步隔离。以前这五行是裸串起来的：任何一步抛错，后面的 bindChrome 就不执行了，
+         于是「下一站」根本没绑点击、手牌/战友托盘空着、资源条不出现 ——
+         手机上表现为「事件按钮都消失了，下一站点也没反应」，而且屏幕上一个字都不报。
+         现在每步各自兜底：存档坏了也不能连累按钮绑定。 */
+      const step = (name, fn) => {
+        try { fn(); return true; }
+        catch (e) { console.error('[Game.boot] ' + name + ' 失败', e); try { Toast.show(name + '初始化失败：' + ((e && e.message) || e)); } catch (ignore) {} return false; }
+      };
+      step('存档', () => Store.load());
+      if (!Store.s) Store.s = Store.defaultState();
+      step('资源条', () => Hud.build());
+      step('按钮绑定', () => this.bindChrome());
+      step('数值刷新', () => Hud.render());
       if (!Store.s.flags.seenIntro) { Store.s.flags.seenIntro = true; Store.save(); Pages.intro(); }
       else if (!Store.s.flags.sawNotes) { setTimeout(() => Pages.notes(), 600); }
       else {
@@ -1207,14 +1216,19 @@
       if (!this._hitLayer) this._hitLayer = {};
       const cur = s.at, seen = {};
       const rec = Game.nextNodes()[0];   /* 唯一真正的下一站：金色高亮，从一众红点里一眼可辨 */
+      const host = doc.getElementById('stage');
+      const vw = (host && host.clientWidth) || window.innerWidth || 390;
+      const vh = (host && host.clientHeight) || window.innerHeight || 844;
+      /* 手机底栏（当前地点 + 下一站）横在屏幕最下面一条：投影落进这条带里的热区会被它整个盖住，
+         手指戳下去戳的是面板不是地名（实测 393×852 的「你在这里」正压在「查看此地」底下）。
+         落进底栏就抬到栏上沿之外，位置只偏几十像素，但按钮戳得到。 */
+      const barEl = doc.getElementById('ui-bottom');
+      const barTop = barEl ? barEl.getBoundingClientRect().top : 1e9;
       NODES3D_SAFE.forEach(n => {
         const p = this.vmap.project(n.x, n.z, n.h || 6);
         if (!p || !p.visible) return;
         /* 远出视口的热区不要落到 DOM 上：绝对定位的离屏按钮会把手机布局视口撑宽，
            固定定位的移动键随即被挤到屏幕外。舞台另有一层 overflow 裁切兜底。 */
-        const host = doc.getElementById('stage');
-        const vw = (host && host.clientWidth) || window.innerWidth || 390;
-        const vh = (host && host.clientHeight) || window.innerHeight || 844;
         if (p.x < -46 || p.x > vw + 46 || p.y < -46 || p.y > vh + 46) return;
         const isCur = n.id === cur;
         const reach = (ADJ[cur] || new Set()).has(n.id) && Game.reachable(n.id);
@@ -1226,7 +1240,9 @@
           b.addEventListener('click', () => Game.onNodeClick(b.dataset.id));
           hits.appendChild(b); this._hitLayer[n.id] = b;
         }
-        b.style.left = p.x + 'px'; b.style.top = p.y + 'px'; b.style.display = 'block';
+        b.style.left = p.x + 'px';
+        b.style.top = (p.y > barTop - 22 && p.y < vh ? Math.max(22, barTop - 22) : p.y) + 'px';
+        b.style.display = 'block';
         const isNext = !isCur && reach && rec && rec.id === n.id;
         b.className = 'node-hit' + (isCur ? ' cur' : '') + (reach ? ' reach' : '') + (isNext ? ' next' : '');
         b.title = n.name; b.textContent = isCur ? '★' : '';
