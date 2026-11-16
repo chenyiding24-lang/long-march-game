@@ -3991,8 +3991,25 @@ function frame(now) {
   const ga = sampleH(S.atD[0], S.atD[2]) + 1.6; if (S.atD[1] < ga) S.atD[1] = ga;
   S.eye = S.eyeD; S.at = S.atD;
   const over = S.viewMode === 'overview';
-  /* 天候跟着脚下的地理位置连续走：往前一步天色变一点，不是七段硬切 */
-  const wtT = over ? 0.55 : tAt(invZ(p[1]));
+  /* 天候跟着脚下的地理位置连续走：往前一步天色变一点，不是七段硬切。
+     漫游时“脚下”是 freeFocus，而不是剧情节点；否则相机飞到草地，
+     天气/雾/沼泽水面仍按于都河计算，水就会被整段裁掉。 */
+  const focusWorld = (S.free && S.freeFocus) ? [S.freeFocus[0], S.freeFocus[2]] : p;
+  const wtT = over ? 0.55 : tAt(invZ(focusWorld[1]));
+  /* 漫游走远了，左上角不能再写“经过·于都河”。按自由焦点显示当前地域，
+     玩家才知道自己已经飞到草地/雪山，而不是以为原地草地没了。 */
+  if (S.free && S.freeFocus) {
+    const rk = regionAt(invX(focusWorld[0]), invZ(focusWorld[1]));
+    if (S._freeRk !== rk) {
+      S._freeRk = rk;
+      const rm = REGION_META.find(r => r.key === rk);
+      if (placeEl) placeEl.textContent = '漫游 · ' + (rm ? rm.name : '长征全线');
+    }
+  } else if (S._freeRk) {
+    S._freeRk = null;
+    const cur = (window.Game3D_Engine && Game3D_Engine.Store) ? NODES3D.find(n => n.id === Game3D_Engine.Store.s.at) : null;
+    if (placeEl && cur) placeEl.textContent = '经过 · ' + cur.name;
+  }
   const wt = weatherAt(wtT);
   S.weather = wt;
   /* 真实太阳方向（与天空光晕同一角度），用于主光照与水面高光，光影物理一致 */
@@ -4017,7 +4034,7 @@ function frame(now) {
      以前近景不论在哪都套一层 fogY=6 的谷底云海：草地水面只比地面高一点点，
      全落在雾面以下，绿草墩被压成灰白一片 —— 看着就像"近景草没了"。
      俯瞰早已关掉云海；这里让近景的草地段也关掉，并把雾距拉远，水草才能透出来。 */
-  const inGrass = !over && regionAt(invX(p[0]), invZ(p[1])) === 'grass';
+  const inGrass = !over && regionAt(invX(focusWorld[0]), invZ(focusWorld[1])) === 'grass';
   /* 近景过去用 wt.fogD*1.1（约 360~400）当雾距：两百步外的地表就压了三四成雾，
      草点、水泊、岸线全被糊成一片灰白 —— 玩家看到的"近景草地没了"大半是这层雾。
      只把草地段的雾距拉长到和视野匹配（其余段落保持原观感，零回归）；
@@ -4520,7 +4537,7 @@ function go2D() {
     }
   } catch (e) {}
   try { localStorage.setItem('cwqs_mode_v1', '2d'); } catch (e) {}
-  location.href = 'map.html?v=47&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
+  location.href = 'map.html?v=48&from=3d' + (at ? '&node=' + encodeURIComponent(at) : '');
 }
 var switch2d = document.getElementById('switch-to-2d');
 var cover2d = document.getElementById('cover-to-2d');
@@ -4692,9 +4709,9 @@ if (typeof location !== 'undefined') {
 syncViewLabel();
 })();
 </script>
-<script src="data.js?v=47"></script>
-<script src="game3d.js?v=47"></script>
-<script src="tutorial.js?v=47"></script>
+<script src="data.js?v=48"></script>
+<script src="game3d.js?v=48"></script>
+<script src="tutorial.js?v=48"></script>
 <script>
 (function () {
   var Q = location.search;
