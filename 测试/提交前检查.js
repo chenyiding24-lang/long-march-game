@@ -50,6 +50,7 @@ step('发布自检 node 测试/发布自检.js', () => run('node 测试/发布�
 
 // 3. 引擎冒烟
 step('引擎冒烟 node 测试/引擎冒烟.js', () => run('node 测试/引擎冒烟.js'));
+step('3D 玩法回归 node 测试/route3d-诊断-玩法.js', () => run('node 测试/route3d-诊断-玩法.js'));
 
 // 4. data 校验（带对账）
 step('data 校验 node 测试/data校验.js 游戏/data.js --对账', () => run('node 测试/data校验.js 游戏/data.js --对账'));
@@ -71,4 +72,4 @@ console.log('1. 游戏/map.html 的 ?v= 必须保持一致（当前值见上面�
 console.log('2. 若已出 CG 图，游戏/art/ 引用也换号');
 console.log('3. 重新跑本脚本确认「全部 ?v= 引用版本号一致」项通过');
 console.log('4. 手机+电脑各点开走一格，确认无 Console 报错、存档码可复制');
-console.log('5. 提交作品链接 + 25 手记 + 26 视频，18:00 前（官网死线 10:00）\n');
+console.log('5. 提交作品链接、创作手记与视频；提交日期与时间以赛事官方通知为准\n');

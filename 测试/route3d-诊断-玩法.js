@@ -139,17 +139,54 @@ const ch = Game.charityTop();
 ok('慈善补给触发（民≥70 且断粮）', ch === true && Store.s.food === BALANCE.charity.food, '粮' + Store.s.food);
 
 /* ---------- 8. 违纪清算路径 ---------- */
-try { fresh(); Sin.register({ type: '纪律', n: 3 }); Sin.tick(); Sin.shouldTrigger(); Sin.collect(NODES[0]); ok('违纪清算路径可触发', true); }
-catch (e) { ok('违纪清算路径可触发', false, e.message); }
+fresh();
+Sin.register({ type: 'mass', n: 1 }); Sin.tick();
+ok('未到三笔账不触发', !Sin.shouldTrigger());
+Sin.register({ type: 'battle', n: 2 });
+const countdown = Store.s.reckonIn;
+Sin.tick();
+ok('新账当格不倒计时', !Sin.shouldTrigger() && Store.s.reckonIn === countdown && !Store.s.reckonFresh);
+for (let i = 0; i < countdown; i++) Sin.tick();
+ok('自然 register/tick 后必触发，类型和教训保留', Sin.shouldTrigger() && Store.s.reckonPending === 'battle' && Store.meta.lessons.mass && Store.meta.lessons.battle);
+const realOpen = Engine.Modal.open;
+let modal;
+Engine.Modal.open = opts => { modal = opts; return { close() {} }; };
+Sin.collect(NODES[0]);
+ok('清算展示纪律规则与第三次提示', modal.html.includes(DISCIPLINE.battle.rule) && modal.actions.length === 1);
 
 /* ---------- 9. 终章念名字 + 名单墙 ---------- */
 try { fresh(); Store.s.flags.sawEnding = false; Ending.run(); Wall.hang(); ok('终章念名字 + 名单墙可运行', true); }
 catch (e) { ok('终章念名字 + 名单墙可运行', false, e.message); }
 
 /* ---------- 10. 下一程（部队打散）重开降编 ---------- */
-fresh(); const mc0 = Store.s.menCap;
-try { Flow.restart(); ok('下一程重开降编 5（下限30）', Store.s.menCap === Math.max(30, mc0 - 5), 'menCap ' + Store.s.menCap); }
-catch (e) { ok('下一程重开降编 5（下限30）', false, e.message); }
+fresh(); Store.checkpoint = null;
+Store.s.at = 'g5'; Store.s.items = ['it_letter']; Store.s.board.names = ['小谢'];
+Store.snapshot();
+Flow.nextCheng(NODE_MAP.g5); modal.actions[0].onClick();
+ok('打散原地接续、降编8、少一张卡、不清道具', Store.s.at === 'g5' && Store.s.run === 2 && Store.s.runsFailed === 1 && Store.s.menCap === 92 && Store.s.hand.length === 5 && Store.s.items[0] === 'it_letter');
+Store.s.at = 'g6'; Store.s.done.g6 = true;
+Flow.warnEnd('mass', NODE_MAP.g6);
+ok('违纪回滚路线但不倒退失败计数与兵力上限', Store.s.at === 'g5' && !Store.s.done.g6 && Store.s.run === 3 && Store.s.runsFailed === 1 && Store.s.runsWarn === 1 && Store.s.menCap === 76 && Store.s.sin === 0);
+Flow.nextCheng(NODE_MAP.g5);
+ok('打散与违纪混合第三次结束', modal.title === '没有走到吴起镇' && Store.meta.plays === 3 && Store.meta.wall.length === 2 && Store.meta.warnWall.length === 1);
+ok('失败终章有分享入口', modal.actions[0].text === '导出这一程');
+modal.actions[1].onClick();
+ok('终章确认后开启新局，名单保留', Store.s.run === 1 && Store.meta.wall[0].names[0] === '小谢');
+fresh(); Store.checkpoint = null;
+Store.s.runsWarn = 1; Store.s.runsFailed = 1;
+Flow.warnEnd('battle', NODE_MAP.g1);
+ok('第三次违纪也结束并进入警示墙', modal.title === '没有走到吴起镇' && Store.meta.warnWall.length === 1);
+fresh(); Store.s.log = [{ kind: 'march', place: '于都' }];
+Ending.run();
+ok('胜利终章含战史、刻名与导出', modal.html.includes('chronicle-line') && modal.html.includes('carve-stage') && modal.actions[0].text === '导出这一程');
+ok('战史模板与分享码使用真实状态', Engine.Chronicle.template('白话').includes('1 格') && /^[0-9A-Z]{6}$/.test(Engine.Share.code()));
+modal.actions[1].onClick();
+ok('胜利挂墙计数并重开', Store.meta.wins === 1 && Store.meta.plays === 1 && Store.s.at === 'g1');
+fresh();
+Store.s.mem = [{ tag: 'saved', text: '旧3D内容' }, { kind: 'saved', what: '旧2D内容', place: '于都' }];
+Engine.Memory.add('saved', '新记忆'); Pages.memory();
+ok('3D兼容两种旧记忆且新写入统一格式', modal.html.includes('旧3D内容') && modal.html.includes('旧2D内容') && Store.s.mem[2].what === '新记忆' && !!Store.s.mem[2].place);
+Engine.Modal.open = realOpen;
 
 /* ---------- 11. 存档码往返 ---------- */
 fresh(); Store.s.at = 'g5'; Store.save();

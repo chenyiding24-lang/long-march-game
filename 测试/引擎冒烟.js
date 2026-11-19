@@ -243,5 +243,35 @@ check('存档码带上 mem', (() => {
   return D.Store.importCode(c) && D.Store.s.mem.length === 2;
 })());
 
+/* 两种存档记忆在 2D 展示均不丢正文；旧检查点不能抵消失败次数。 */
+D.Store.s.mem = [{ tag: 'saved', text: '来自旧3D' }, { kind: 'saved', what: '来自2D', place: '于都' }];
+let opened;
+D.Router.open = opts => { opened = opts; return { close() {} }; };
+D.Pages.memory();
+check('2D记忆页兼容双格式', opened.html.includes('来自旧3D') && opened.html.includes('来自2D'));
+const peer = { console, TextEncoder, TextDecoder, btoa, atob, setTimeout: () => 0, clearTimeout() {} };
+peer.window = peer; peer.localStorage = localStorage;
+vm.createContext(peer);
+vm.runInContext(fs.readFileSync(path.join(ROOT, '游戏', 'data.js'), 'utf8') + '\n' + g3dSrc, peer);
+const E3 = peer.Game3D_Engine; E3.Store.load();
+D.Memory.add('saved', '2D新写入');
+check('2D存档码到3D保留新旧记忆', E3.Store.importCode(D.Store.exportCode()) && E3.Store.s.mem.map(m => E3.Memory.normalize(m).what).join('|').includes('2D新写入'));
+E3.Memory.add('saved', '3D新写入');
+check('3D存档码到2D保留新旧记忆', D.Store.importCode(E3.Store.exportCode()) && D.Store.s.mem.map(m => D.Memory.normalize(m).what).join('|') === '来自旧3D|来自2D|2D新写入|3D新写入');
+D.Hud.render = () => {}; D.MapView.recenter = () => {};
+D.Store.s = D.Store.defaultState(); D.Store.meta = D.Store.defaultMeta();
+D.Store.s.at = 'g5'; D.Store.snapshot();
+D.Flow.nextCheng(D.NODE_BY_ID.g5); opened.actions[0].onClick();
+D.Store.s.at = 'g6'; D.Store.s.done.g6 = true;
+D.Flow.warnEnd('mass', D.NODE_BY_ID.g6);
+check('2D旧检查点回滚不退累计失败数', D.Store.s.runsFailed === 1 && D.Store.s.runsWarn === 1 && D.Store.s.run === 3 && D.Store.s.at === 'g5' && !D.Store.s.done.g6 && D.Store.s.menCap === 76);
+D.Flow.warnEnd('battle', D.NODE_BY_ID.g5);
+check('2D混合第三次失败终章', opened.title === '没有走到吴起镇' && D.Store.meta.plays === 3);
+D.Store.s = D.Store.defaultState();
+D.Sin.register({ type: 'mass', n: 3 });
+const wait = D.Store.s.reckonIn; D.Sin.tick();
+check('2D新账当格不触发', !D.Sin.shouldTrigger() && D.Store.s.reckonIn === wait);
+for (let i = 0; i < wait; i++) D.Sin.tick();
+check('2D自然倒计时触发', D.Sin.shouldTrigger());
 console.log('\n' + (bad ? '冒烟测试失败 ' + bad + ' 项' : '冒烟测试全部通过'));
 process.exit(bad ? 1 : 0);

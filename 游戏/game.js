@@ -148,6 +148,7 @@ const Store = {
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
       const o = JSON.parse(new TextDecoder().decode(bytes));
       if (!o || o.v !== 1 || !o.s || !o.s.at || !NODE_BY_ID[o.s.at]) return false;
+      this.checkpoint = null;
       this.s = Object.assign(this.defaultState(), o.s);
       this.meta = Object.assign(this.defaultMeta(), o.m || {});
       if (!Array.isArray(this.s.log)) this.s.log = [];
@@ -157,6 +158,7 @@ const Store = {
     } catch (e) { return false; }
   },
   load() {
+    this.checkpoint = null;
     try {
       const raw = localStorage.getItem(SAVE_KEY);
       this.s = raw ? Object.assign(this.defaultState(), JSON.parse(raw)) : this.defaultState();
@@ -178,7 +180,14 @@ const Store = {
     } catch (e) { /* 隐私模式下忽略 */ }
   },
   snapshot() { this.checkpoint = JSON.parse(JSON.stringify(this.s)); },
-  restore() { if (this.checkpoint) this.s = JSON.parse(JSON.stringify(this.checkpoint)); }
+  restore() {
+    if (!this.checkpoint) return;
+    const current = this.s;
+    this.s = JSON.parse(JSON.stringify(this.checkpoint));
+    /* 检查点恢复路线，不倒退累计失败次数与降编代价。 */
+    ['run', 'runsFailed', 'runsWarn'].forEach(k => { this.s[k] = Math.max(this.s[k] || 0, current[k] || 0); });
+    this.s.menCap = Math.min(this.s.menCap, current.menCap);
+  }
 };
 
 /* ---------- CgWeather：CG 天气粒子层（纯 canvas，零依赖，17 §6.1） ----------
@@ -546,6 +555,10 @@ const Chronicle = {
    四类事实全部来自真实结算：收编、交出去的人、看见的违纪、同饿。 */
 const MEM_KIND = { saved: '收编', abandoned: '交出去的人', sin_witness: '看见的事', shared_hunger: '同饿' };
 const Memory = {
+  normalize(m) {
+    return Object.assign({}, m, { kind: m.kind != null ? m.kind : m.tag,
+      what: m.what != null ? m.what : (m.text || '') });
+  },
   add(kind, what, extra) {
     const s = Store.s;
     if (!s.mem) s.mem = [];
@@ -557,6 +570,7 @@ const Memory = {
     if (s.mem.length > 60) s.mem.splice(0, s.mem.length - 60);
   },
   template(m) {
+    m = this.normalize(m);
     const bank = (typeof NPC_LINES !== 'undefined' ? NPC_LINES : []).filter(l => l.kind === m.kind);
     const line = bank.length ? bank[Math.floor(Math.random() * bank.length)] : null;
     if (!line) return '（他没说话，只是把帽檐压低了一点。）';
@@ -2216,7 +2230,7 @@ const Pages = {
   /* 战友记忆页：把结构化事实摊开给玩家看，就是「AI NPC 有记忆」的证据 */
   memory() {
     const s = Store.s;
-    const list = (s.mem || []).slice().reverse();
+    const list = (s.mem || []).map(m => Memory.normalize(m)).reverse();
     const html = list.length ? list.map((m, i) => `
       <div class="cell ${m.seen ? '' : 'fresh'}">
         <b>${esc(m.place || '路上')} · ${esc(MEM_KIND[m.kind] || m.kind)}</b>
@@ -2471,7 +2485,7 @@ const Ending = {
             Store.meta.plays += 1;
             Store.meta.wins += 1;
             const st = Store.defaultState(); st.flags.seenIntro = true;
-            Store.s = st; Store.save();
+            Store.s = st; Store.checkpoint = null; Store.save();
             Router.closeAll(); MapView.recenter(); Hud.render();
             Toast.show('牌已挂上墙。要不要再走一次，多记住几个人？');
             setTimeout(() => Pages.wall(), 300);
@@ -2510,7 +2524,7 @@ const Ending = {
           Store.meta.best = Math.max(Store.meta.best, s.board.names.length);
           const st = Store.defaultState();
           st.flags.seenIntro = true; st.flags.sawNotes = true;
-          Store.s = st; Store.save();
+          Store.s = st; Store.checkpoint = null; Store.save();
           Router.closeAll(); MapView.recenter(); Hud.render();
           Toast.show('牌已挂上墙。要不要再走一次，走到吴起镇？');
           setTimeout(() => Pages.wall(), 300);

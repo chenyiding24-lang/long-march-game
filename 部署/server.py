@@ -2,7 +2,7 @@
 
 设计要点（与 21 §八 / 23 §5 T5 对齐）：
 1. 站点根目录仍是 `游戏/`，五件套一个不改、零外链、双击 file:// 可玩。
-2. AI 通道 `ai-channel.js` 只在返回首页时注入，不写进 `游戏/`，
+2. AI 通道 `ai-channel.js` 在返回首页与两种地图页时注入，不写进 `游戏/`，
    因此 `测试/发布自检.js` 的「零网络请求」检查永远通过。
 3. 密钥只从环境变量 MODELSCOPE_API_KEY 读，绝不硬编码、绝不进仓库/日志。
 4. 单访客 6 次/分；429 / 超时 / 未配密钥 / 任何异常，一律返回 {"text": null}，
@@ -49,11 +49,28 @@ def _rate_ok(ip):
     return True
 
 
-@app.get("/", response_class=HTMLResponse)
-def index():
-    html = (GAME / "index.html").read_text(encoding="utf-8")
+def game_page(name):
+    html = (GAME / name).read_text(encoding="utf-8")
     inject = CHANNEL.read_text(encoding="utf-8")
     return HTMLResponse(html.replace("</body>", "<script>\n" + inject + "\n</script>\n</body>"))
+
+
+@app.get("/", response_class=HTMLResponse)
+@app.get("/index.html", response_class=HTMLResponse)
+def index():
+    return game_page("index.html")
+
+
+@app.get("/map", response_class=HTMLResponse)
+@app.get("/map.html", response_class=HTMLResponse)
+def map_page():
+    return game_page("map.html")
+
+
+@app.get("/route3d", response_class=HTMLResponse)
+@app.get("/route3d.html", response_class=HTMLResponse)
+def route3d_page():
+    return game_page("route3d.html")
 
 
 @app.post("/api/npc")
@@ -92,5 +109,5 @@ async def npc(req: Request):
         return JSONResponse({"text": None})
 
 
-# 静态资源兜底；上面两条路由先注册，所以 "/" 与 "/api/npc" 优先命中
+# 页面与 API 路由必须先于静态资源兜底注册。
 app.mount("/", StaticFiles(directory=str(GAME)), name="static")

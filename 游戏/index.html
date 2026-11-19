@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#12110e">
 <meta name="description" content="长征：万水千山 —— 平面行军与 3D 立体长卷，同一局进度，随时切换。">
 <title>长征：万水千山 · 主入口</title>
-<link rel="icon" href="favicon.svg?v=49" type="image/svg+xml">
+<link rel="icon" href="favicon.svg?v=50" type="image/svg+xml">
 <style>
   :root {
     --paper:#ece2cb; --paper-2:#d9cdb3; --ink:#1b1813; --ink-2:#5e5546;
@@ -38,6 +38,8 @@
       radial-gradient(120% 100% at 50% 0%, transparent 35%, rgba(5,6,5,.58) 100%);
     mix-blend-mode:soft-light;
   }
+  /* 触屏背景采用独立绘制高度，地址栏伸缩只裁切，不重新 cover 缩放。 */
+  body::before, body::after { bottom:auto; height:var(--entry-bg-height, 100%); }
   a { color:inherit; }
   button, a { -webkit-tap-highlight-color:transparent; }
   .shell {
@@ -158,7 +160,7 @@
     background:linear-gradient(180deg, rgba(31,29,23,.9), rgba(18,17,14,.95));
     box-shadow:0 26px 70px rgba(0,0,0,.32); transition:transform .28s ease, border-color .28s ease, box-shadow .28s ease;
   }
-  .mode-card:hover, .mode-card:focus-visible {
+  .mode-card:focus-visible {
     transform:translateY(-5px); border-color:rgba(220,193,138,.55); outline:none;
     box-shadow:0 32px 80px rgba(0,0,0,.44), 0 0 0 1px rgba(197,161,92,.1);
   }
@@ -167,7 +169,14 @@
     background:linear-gradient(115deg, transparent 35%, rgba(255,255,255,.055) 48%, transparent 60%);
     transform:translateX(-120%); transition:transform .6s ease;
   }
-  .mode-card:hover::after { transform:translateX(120%); }
+  @media (hover:hover) and (pointer:fine) {
+    .mode-card:hover {
+      transform:translateY(-5px); border-color:rgba(220,193,138,.55);
+      box-shadow:0 32px 80px rgba(0,0,0,.44), 0 0 0 1px rgba(197,161,92,.1);
+    }
+    .mode-card:hover::after { transform:translateX(120%); }
+    .mode-card:hover .go { transform:translateX(3px); background:var(--red-2); }
+  }
   .preview { position:relative; height:212px; flex:0 0 auto; overflow:hidden; border-bottom:1px solid rgba(207,190,158,.16); }
   .preview svg { width:100%; height:100%; display:block; }
   .preview::after {
@@ -198,7 +207,6 @@
     background:var(--red); color:#fff2da; font-size:18px; box-shadow:inset 0 0 0 1px rgba(255,236,207,.28);
     transition:transform .24s ease, background .24s ease;
   }
-  .mode-card:hover .go { transform:translateX(3px); background:var(--red-2); }
 
   /* 2D 预览：宣纸等高线 */
   .map2d-bg { fill:#d9cdb4; }
@@ -265,6 +273,34 @@
     *, *::before, *::after { scroll-behavior:auto !important; transition:none !important; animation:none !important; }
   }
 </style>
+<script>
+(function () {
+  var touch = window.matchMedia('(pointer:coarse)');
+  var lastWidth = 0, lastAngle;
+  function sizeBackground() {
+    var root = document.documentElement;
+    if (!touch.matches) {
+      root.style.removeProperty('--entry-bg-height');
+      lastWidth = 0;
+      return;
+    }
+    var width = root.clientWidth;
+    var angle = screen.orientation ? screen.orientation.angle : window.orientation;
+    // 同宽 resize 常来自地址栏或软键盘，不改变背景尺寸；旋转/分屏才重新构图。
+    if (width === lastWidth && angle === lastAngle) return;
+    lastWidth = width;
+    lastAngle = angle;
+    var landscape = width > window.innerHeight;
+    var screenHeight = landscape ? Math.min(screen.width, screen.height) : Math.max(screen.width, screen.height);
+    root.style.setProperty('--entry-bg-height', Math.max(window.innerHeight, screenHeight) + 'px');
+  }
+  sizeBackground();
+  window.addEventListener('resize', sizeBackground);
+  window.addEventListener('orientationchange', function () { requestAnimationFrame(sizeBackground); });
+  if (screen.orientation) screen.orientation.addEventListener('change', sizeBackground);
+  if (touch.addEventListener) touch.addEventListener('change', sizeBackground);
+})();
+</script>
 </head>
 <body>
 <main class="shell">
@@ -306,7 +342,7 @@
     </div>
 
     <div class="mode-grid" aria-label="选择地图模式">
-      <a class="mode-card" id="mode-2d" href="map.html?v=49&from=start" data-mode="2d">
+      <a class="mode-card" id="mode-2d" href="map.html?v=50&from=start" data-mode="2d">
         <div class="preview">
           <span class="preview-tag"><i></i>一纸山河</span>
           <svg viewBox="0 0 420 212" role="img" aria-label="平面行军路线示意">
@@ -343,7 +379,7 @@
         </div>
       </a>
 
-      <a class="mode-card" id="mode-3d" href="route3d.html?v=49&play=1&from=start" data-mode="3d">
+      <a class="mode-card" id="mode-3d" href="route3d.html?v=50&play=1&from=start" data-mode="3d">
         <div class="preview">
           <span class="preview-tag"><i></i>立体长卷</span>
           <svg viewBox="0 0 420 212" role="img" aria-label="3D 立体行军路线示意">
@@ -411,8 +447,8 @@
   </footer>
 </main>
 
-<script src="data.js?v=49"></script>
-<script src="tutorial.js?v=49"></script>
+<script src="data.js?v=50"></script>
+<script src="tutorial.js?v=50"></script>
 <script>
 (function () {
   'use strict';
@@ -463,8 +499,8 @@
       try { localStorage.setItem(MODE_KEY, mode); } catch (e) {}
       var at = hasSave && s.at ? '&node=' + encodeURIComponent(s.at) : '';
       var target = mode === '3d'
-        ? 'route3d.html?v=49&play=1&from=start' + at
-        : 'map.html?v=49&from=start' + at;
+        ? 'route3d.html?v=50&play=1&from=start' + at
+        : 'map.html?v=50&from=start' + at;
       location.href = target;
     });
   });

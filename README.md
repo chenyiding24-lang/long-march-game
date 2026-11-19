@@ -19,7 +19,7 @@
 
 **站点根目录 = `游戏/`**，首页 = `游戏/index.html`。
 
-发布清单（就这 10 个文件，共约 731 KB）：
+发布清单（以下 10 个文件，另须保留 `art/` 的 21 张 CG 配图）：
 
 | 文件 | 作用 |
 |---|---|
@@ -75,13 +75,14 @@ npx --yes wrangler pages deploy 游戏 --project-name long-march-game --commit-d
 红军长征游戏/
 ├─ README.md              ← 本文件（交接说明）
 ├─ index.html             ← 整包发布时的根跳转页（仅跳转，非游戏本体）
-├─ 游戏/                  ← ★ 站点根目录，只发这 10 个文件
+├─ 游戏/                  ← ★ 站点根目录，10 个文件 + art/ 配图
 │  ├─ index.html          ← 主入口：平面 / 立体并列
 │  ├─ map.html            ← 平面行军
 │  ├─ start.html          ← 旧书签跳转页
 │  ├─ route3d.html        ← 立体长卷
 │  ├─ game3d.js           ← 3D 玩法引擎（与平面共用存档）
 │  ├─ tutorial.js         ← 两套地图共用的新手引导
+│  ├─ art/                ← 21 张 CG WebP 与配图说明
 │  ├─ style.css / data.js / game.js / favicon.svg
 ├─ 测试/                  ← 本地自检与跑测，不发布
 │  ├─ 发布自检.js         ← 发布前/改动后跑这个
@@ -104,26 +105,25 @@ npx --yes wrangler pages deploy 游戏 --project-name long-march-game --commit-d
 
 ---
 
-## 四、代码地图（只有 4 个文件，这里够你定位）
+## 四、代码地图（10 个入口、脚本与样式等文件，另有 art/ 配图）
 
 `game.js` 是一个 IIFE，内部按常量对象分模块，顺序即依赖顺序：
 
-| 位置 | 模块 | 职责 |
+| 文件 | 模块 | 职责 |
 |---|---|---|
-| `game.js:35` | `BALANCE` | **所有可调数值，只在这一处** |
-| `game.js:75` | `Store` | 状态 + localStorage 读写（`load/save/snapshot/restore`） |
-| `game.js:121` | `Router` | 弹窗栈。**全站不用下拉菜单**，一律 链接 + 弹窗 |
-| `game.js:196` | `Hud` | 右上角四条资源 + 底部两个托盘；`Hud.fit()`（`game.js:241`）现算窄屏军账底边距 |
-| `game.js:260` | `MapView` | SVG 大地图（viewBox 2000×4600）+ 拖拽/滚轮/双指缩放 + 视野遮罩 + **下一站判定**（`frontNodes / nextNode / goNext`） |
-| `game.js:713` | `Game` | 主流程：`march`（行军 tick）→ `compute`（结算）→ `applyChoice` → `commit` → `finishChoice` → `afterResolve`；大关卡首破的「三样只能带一样」在 `gateSpoils`（`game.js:1271`）；行进事件文案在 `rollMoveEvent / pickVariant`（`game.js:1054`、`game.js:1087`） |
-| `game.js:1426` | `Sin` | 「多行不义必自毙」：违纪计数与收账 |
-| `game.js:1491` | `Flow` | 部队打散 → 下一程；违纪自毙 → 回到走错前那一步；第三次触发时转入失败终章 |
-| `game.js:1558` | `signLine()` | 作业署名行（开场 CG 与两个终章共用） |
-| `game.js:1566` | `Pages` | 玩家须知 / 规则手册 / **制作与分工 `credits()`（`game.js:1640`）** / 木牌 / 名单墙 / 史料 / 卡与道具 / 开场 |
-| `game.js:1830` | `Ending` | `run` 走到吴起镇「念名字」（含 B 空格 / C 文物两段条件文本）；`fall` 是失败终章「没有走到吴起镇」（`game.js:1872`） |
-| `game.js:1908` | `Game.debug` | 调试桥：把内部对象挂到 `window.Game`，供跑测台用；`Game.debug.event('mv_mule', 1)` 直接弹出某条行进事件的某个写法 |
+| `game.js` / `game3d.js` | `BALANCE` | 两引擎各有一份数值定义，修改须同步且经过跑测 |
+| `game.js` / `game3d.js` | `Store` | 共用存档键、状态读写与检查点恢复 |
+| `game.js` / `game3d.js` | `Router` / `Modal` | 两模式弹窗栈 |
+| `game.js` / `game3d.js` | `Hud` | 四资源与托盘 |
+| `game.js` | `MapView` | SVG 地图、缩放拖动与下一站判定 |
+| `route3d.html` / `game3d.js` | `VoxelMap` / `Game3D` | WebGL2 地图、镜头与投影点击 |
+| `game.js` / `game3d.js` | `Game` | 行军、选项结算、行进事件与缴获 |
+| `game.js` / `game3d.js` | `Sin` / `Flow` | 延迟违纪清算、重开与累计第三次失败终止 |
+| `game.js` / `game3d.js` | `Pages` | 木牌、名单墙、史料、战友、卡牌与存档面板 |
+| `game.js` / `game3d.js` | `Ending` | 抵达终章与失败终章 |
+| `tutorial.js` | `Tutorial` | 首页与两模式共用的九步引导 |
 
-`data.js` 全是数组/字面量：`NODES`（49 格）、`EDGES`（53 边）、`MOVE_EVENTS`（10 个行进突发事件）、`HISTORY`（41 条史料，带 A/R/? 可信度分级）、`CARDS`（20 张手法卡）、`ITEMS`（7 道具）、`COMRADES`、`REGIONS/PROVINCES/RIVERS/RANGES`（底图几何）、`ENEMIES`（追兵路线）、**`COURSE` / `TEAM`（`data.js:809`、`data.js:818`）—— 作业信息与制作名单的唯一来源，页脚、顶栏说明页、开场与两个终章都读它**。
+`data.js` 全是数组/字面量：`NODES`（49 格）、`EDGES`（53 边）、`MOVE_EVENTS`（20 类行进突发事件）、`HISTORY`（41 条史料，带 A/R/? 可信度分级）、`CARDS`（20 张手法卡）、`ITEMS`（7 道具）、`COMRADES`（7 名战友）、`REGIONS/PROVINCES/RIVERS/RANGES`（底图几何）、`ENEMIES`（追兵路线）。当前纯净游戏版已移除 `COURSE` / `TEAM` 作业信息与制作名单，不应按旧记录重新添加。
 
 **玩法一条线**：大地图上一格一格往北走 → 每格固定 −1 天粮 −1 天时窗 → 点前方格行军 → 到格触发抉择（选项按下后**先在每个选项旁原地亮账停几秒**再跳转）→ 大关卡有 CG 分镜 → 木牌记名字 → 走完吴起镇念名字。
 
@@ -144,7 +144,7 @@ npx --yes wrangler pages deploy 游戏 --project-name long-march-game --commit-d
 9. **「玩家须知」只在第一次进游戏时弹**（看 `Store.s.flags.sawNotes`），之后靠地图左下角的朱红「须知」章重开。别改成每次都弹，那会变成拦路。
 10. **抉择弹窗是 `closable:false + blocking:true`**，玩家点不关它；`Router.closeAll()` 里那句"只有真按过选项才结清"的守卫是防崩的，别删。
 11. **`MOVE_EVENTS` 选项上的 `anch:[...]` 不是冗余字段，别删。** 它是"选项里提到的每一个实体，必须在**这一次屏幕上的正文**里出现过"这条口径的可执行版本（用户反馈「半里路的垫木」那条事件读起来没头没尾之后加的）。`测试/data校验.js` 会拿它去查每一条正文和每一个不带自己 options 的变体；删掉 anch = 关掉这道闸。变体可以自带 `options`（不带走事件级那几条，`pickVariant` 就是这个合并口径），**自带 options 的变体必须自己把锚点交代全**。改完跑 `node 测试/data校验.js 游戏/data.js --对账` 能打出「事件 × 变体 × 选项 × 锚点」对账清单。
-12. **`TEAM` 里组员的 `duty` 是空的，那是"还没确认"，不是漏写。** 这是要署名的作业材料（队长丁晨逸，组员贺智杰、冯天秦、朱培森、吴柏燃），分工一句话必须由本人自己给，**工具不得代拟**。名单、课程、选题口径同理：只改 `data.js` 的 `COURSE` / `TEAM`，不要在 `game.js` 或 `index.html` 里另抄一份。
+12. **当前游戏已移除作业署名与组队信息。** 旧材料里的名单与分工属于历史记录，不要恢复到游戏中；若另做参赛署名材料，分工仍须由本人确认，工具不得代拟。
 13. 改完全量自检：`node --check 游戏/game.js && node 测试/发布自检.js`，并在浏览器 Console 确认无报错。
 
 ---
@@ -167,7 +167,9 @@ C11 落地后的复核（2026-10-26，四策略各 125 局共 500 局，详见 `
 
 - **C 结局的触发阈值**：A 结局里带 B 空格 / C 文物两段条件文本（泸定桥木牌留白、史料阅读率 ≥ 50%），文案在，但阈值没跑过真人数据，仍是暂定口径。
 - **失败终章之外的重开页**：打散/违纪的前两次仍走"下一程 / 警示重开"（不是结局页），第三次才转 `Ending.fall`。这条节奏是 2026-10-25 定的，数值在 `BALANCE.fallLimit`。
-- **名单墙的单局复盘页**、**AIGC 美术位与地标插画**、**CG 分镜配图**、**音频**：都还是空的，代码里留了位。
+- **CG 分镜配图**：`游戏/art/` 已有 `cg-01.webp`～`cg-21.webp` 共 21 张，两引擎已接入剧情配图；油画重绘尚未做，文件齐全不等于人工核图或全量验收完成。
+- **名单墙的单局复盘页**、**AIGC 美术位与地标插画**仍保留为待办，不因已有 CG 或终章战史叙事而视为完成；**音频**仍待补素材。
+- **S4 军帐 / S6 追兵学习**：两引擎的 `council.enabled` / `enemyLearn.enabled` 均默认 `false`，不按已开启玩法介绍。
 - **人物篇目**（陈树湘 / 杨积庆 / 老钱 / 辛父 / 幺笙）作为独立关卡未做。
 - **`anch` 锚点闸目前只覆盖 `MOVE_EVENTS`（行进事件）**。`NODES`（大关卡与事件格）的选项没上这道闸，因为一个节点只有一套正文+一套选项，不存在"几种写法共用一套选项"那个缺陷。**不要**自作主张给 49 个节点批量补 `anch`，那会产生大量假错误；要推广请先问。
 - **初始资源与追兵强度已于 2026-10-26 拍板**（兵初值固定 100 的前提下取 C11，见 `15-*.md`）—— `10-*.md` 里那句"当前数值仍待用户拍板"说的就是这一条，现已定稿。**§六 的数值就是现行口径**，要再拧必须先跑 bench 再问用户。另一头，`08` §十三 列的 7 个玩法问题（主角是否虚构、遵义会议选项范围、贺捷生条目、自毙死法、草地分裂线、底图来源、范围档次）多数已随实现落地成事实，但**没有逐条回填到 08**，仍算未定稿 —— 那几条**不要**替用户拍板。

@@ -115,6 +115,7 @@
     },
     defaultMeta() { return { wall: [], warnWall: [], unlocked: [], lessons: {}, best: 0, plays: 0, wins: 0 }; },
     load() {
+      this.checkpoint = null;
       try {
         const raw = store_get(SAVE_KEY);
         this.s = raw ? Object.assign(this.defaultState(), JSON.parse(raw)) : this.defaultState();
@@ -131,7 +132,14 @@
     },
     save() { store_set(SAVE_KEY, JSON.stringify(this.s)); store_set(META_KEY, JSON.stringify(this.meta)); },
     snapshot() { this.checkpoint = JSON.stringify(this.s); },
-    rollback() { if (this.checkpoint) this.s = JSON.parse(this.checkpoint); },
+    restore() {
+      if (!this.checkpoint) return;
+      const current = this.s;
+      this.s = JSON.parse(this.checkpoint);
+      ['run', 'runsFailed', 'runsWarn'].forEach(k => { this.s[k] = Math.max(this.s[k] || 0, current[k] || 0); });
+      this.s.menCap = Math.min(this.s.menCap, current.menCap);
+    },
+    rollback() { this.restore(); },
     exportCode() {
       try {
         const s = this.s, m = this.meta || this.defaultMeta();
@@ -151,6 +159,7 @@
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const o = JSON.parse(new TextDecoder().decode(bytes));
         if (!o || o.v !== 1 || !o.s || !o.s.at || !NODE_MAP[o.s.at]) return false;
+        this.checkpoint = null;
         this.s = Object.assign(this.defaultState(), o.s);
         this.meta = Object.assign(this.defaultMeta(), o.m || {});
         if (!Array.isArray(this.s.log)) this.s.log = [];
@@ -161,14 +170,189 @@
   };
 
   /* ---------------- 轻量 Memory（战史/记忆，移植自 game.js Memory 的最小集） ---------------- */
-  const Memory = {
-    add(tag, text) {
-      const s = Store.s; if (!s.mem) s.mem = [];
-      if (s.mem.filter(m => m.tag === tag && m.text === text).length) return;
-      s.mem.push({ tag, text }); if (s.mem.length > 60) s.mem.shift();
-    },
-    receipt() { this.add('arrived', '到了一处，先记下来'); }
-  };
+const Share = {
+  code() {
+    const s = Store.s;
+    const raw = s.run + '|' + s.board.names.length + '|' + s.men + '|' + Object.keys(s.visited).length;
+    let h = 0;
+    for (let i = 0; i < raw.length; i++) h = (h * 31 + raw.charCodeAt(i)) >>> 0;
+    return h.toString(36).toUpperCase().slice(0, 6).padStart(6, '0');
+  },
+  defaultLine() {
+    const s = Store.s;
+    const steps = (s.log || []).filter(e => e.kind === 'march').length;
+    return '第 ' + s.run + ' 程 · 走过 ' + steps + ' 格 · 木牌 ' + s.board.names.length + ' 个名字';
+  },
+  render(line) {
+    try {
+      const c = document.createElement('canvas'); c.width = 900; c.height = 1200;
+      const x = c.getContext('2d'); if (!x) return null;
+      const s = Store.s;
+      x.fillStyle = '#efe6d0'; x.fillRect(0, 0, 900, 1200);
+      x.fillStyle = '#8C3B2E'; x.fillRect(0, 0, 900, 14);
+      x.strokeStyle = 'rgba(122,111,87,.5)'; x.lineWidth = 2; x.strokeRect(28, 34, 844, 1132);
+      x.fillStyle = '#2c2820'; x.font = '500 54px "Songti SC","SimSun",serif';
+      x.fillText('万水千山', 64, 118);
+      x.fillStyle = '#6b614f'; x.font = '24px "Songti SC","SimSun",serif';
+      x.fillText('你的这一程 · ' + this.code(), 64, 162);
+      /* 木牌：真实刻名 + 永远填不满的留白格 */
+      x.fillStyle = '#5d4a33'; x.fillRect(64, 210, 772, 360);
+      x.fillStyle = '#6d583e'; x.fillRect(76, 222, 748, 336);
+      x.fillStyle = '#f0e6d2'; x.font = '30px "Songti SC","SimSun",serif';
+      const names = s.board.names.slice(0, 24);
+      names.forEach((n, i) => x.fillText(n, 100 + (i % 4) * 185, 280 + Math.floor(i / 4) * 52));
+      if (!names.length) x.fillText('（这块牌还是空的）', 100, 280);
+      if (s.board.blanks) {
+        x.fillStyle = '#b9a98a'; x.font = '22px "Songti SC","SimSun",serif';
+        x.fillText('另有 ' + s.board.blanks + ' 格空白，没有找到名字', 100, 530);
+      }
+      x.fillStyle = '#2c2820'; x.font = '28px "Songti SC","SimSun",serif';
+      ['兵 ' + s.men, '粮 ' + s.food, '时 ' + s.window, '民 ' + s.trust,
+       '馆藏 ' + s.items.length + '/' + Object.keys(ITEMS).length]
+        .forEach((t, i) => x.fillText(t, 64 + (i % 3) * 270, 640 + Math.floor(i / 3) * 52));
+      x.fillStyle = '#4c463c'; x.font = '26px "Songti SC","SimSun",serif';
+      x.fillText(String(line || this.defaultLine()).slice(0, 28), 64, 780);
+      x.fillStyle = '#7b7261'; x.font = '20px "Songti SC","SimSun",serif';
+      x.fillText('纯静态 · 零依赖 · 点开即玩', 64, 1080);
+      return c.toDataURL('image/png');
+    } catch (e) { return null; }
+  },
+  download(line) {
+    const url = this.render(line);
+    if (!url) { Toast.show('这张卡没能生成'); return false; }
+    const a = document.createElement('a');
+    a.href = url; a.download = '我的这一程-' + this.code() + '.png'; a.click();
+    Toast.show('已导出「你的这一程」');
+    return true;
+  }
+};
+
+const Chronicle = {
+  _cache: null,
+  facts() {
+    const s = Store.s, log = (s.log || []).filter(e => e.kind !== 'digest');
+    const march = log.filter(e => e.kind === 'march');
+    const choices = log.filter(e => e.kind === 'choice');
+    return {
+      run: s.run, steps: march.length, choices: choices.length,
+      places: [...new Set(log.map(e => e.place).filter(Boolean))].slice(0, 12),
+      firstPlace: (march[0] || {}).place || '', lastPlace: (log[log.length - 1] || {}).place || '',
+      names: s.board.names.slice(), blanks: s.board.blanks,
+      men: s.men, food: s.food, window: s.window, trust: s.trust,
+      items: s.items.slice(), hunger: march.filter(e => e.hunger).length,
+      sins: choices.filter(e => e.sin).length,
+      labels: choices.slice(0, 12).map(e => e.label)
+    };
+  },
+  /* 模板战史：只用 facts 里的字段，永不出错，断网也在 */
+  template(tone) {
+    const f = this.facts();
+    if (tone === '方志') {
+      return '第' + f.run + '程。自' + (f.firstPlace || '于都') + '启行，历' + f.steps + '程' +
+        (f.hunger ? '，断粮者再' + f.hunger : '') + '。' +
+        (f.lastPlace ? '止于' + f.lastPlace + '。' : '') +
+        '木牌刻名' + f.names.length + (f.blanks ? '，留白' + f.blanks + '格' : '') +
+        '。余兵' + f.men + '，粮' + f.food + '，民' + f.trust + '。';
+    }
+    return '这一程走了 ' + f.steps + ' 格，做过 ' + f.choices + ' 次取舍。' +
+      (f.firstPlace ? '从' + f.firstPlace + '出发，' : '') +
+      (f.lastPlace ? '到' + f.lastPlace + '。' : '') +
+      (f.hunger ? '有 ' + f.hunger + ' 格断了粮。' : '') +
+      '木牌上刻下 ' + f.names.length + ' 个名字' + (f.blanks ? '，还留着 ' + f.blanks + ' 格空白' : '') + '。' +
+      '走到最后，兵 ' + f.men + '，粮 ' + f.food + '，民 ' + f.trust + '。';
+  },
+  /* 守卫：越界整条丢弃，绝不把模型的即兴写进作品 */
+  guard(text, f) {
+    if (typeof text !== 'string' || text.length < 20 || text.length > 300) return false;
+    if (/胜利|伟大|不朽|辉煌|史诗|致敬|铭记历史|永不磨灭/.test(text)) return false;
+    if (/毛泽东|周恩来|朱德|蒋介石|张国焘/.test(text)) return false;
+    if (/忽略(上文|之前|以上)|系统提示|作为一个?AI|语言模型/.test(text)) return false;
+    const allowed = [f.run, f.steps, f.choices, f.hunger, f.sins, f.names.length,
+      f.blanks, f.men, f.food, f.window, f.trust, f.items.length].map(String);
+    return !(text.match(/\d+/g) || []).some(n => allowed.indexOf(n) < 0);
+  },
+  async write(tone) {
+    const f = this.facts();
+    const ch = window.__CWQS_AI;
+    if (!ch || typeof ch.ask !== 'function') return this.template(tone);
+    try {
+      const prompt = CHRONICLE_PROMPT.replace('{{LOG_JSON}}', JSON.stringify(f))
+        .replace('{{TONE}}', tone === '方志' ? '方志体' : '白话');
+      const out = await ch.ask(prompt, f);
+      return this.guard(out, f) ? out : this.template(tone);
+    } catch (e) { return this.template(tone); }
+  },
+  /* 终章同步用：AI 还没回来就先给模板，回来再替换，玩家永远不空等 */
+  install(hostId, tone) {
+    const el = doc && doc.getElementById(hostId);
+    if (!el) return;
+    el.textContent = this.template(tone);
+    this.write(tone).then(t => {
+      const now = document.getElementById(hostId);
+      /* 异步回包前若弹窗已关、元素被卸载，跳过替换：避免报错或写进错误的宿主 */
+      if (now && now.isConnected && t && t !== now.textContent) now.textContent = t;
+    }).catch(() => {});
+  },
+  excerpt() {
+    if (this._cache && this.guard(this._cache, this.facts())) return this._cache.slice(0, 28);
+    return this.template('白话').slice(0, 28);
+  }
+};
+
+const MEM_KIND = { saved: '收编', abandoned: '交出去的人', sin_witness: '看见的事', shared_hunger: '同饿' };
+const Memory = {
+  normalize(m) {
+    return Object.assign({}, m, { kind: m.kind != null ? m.kind : m.tag,
+      what: m.what != null ? m.what : (m.text || '') });
+  },
+  add(kind, what, extra) {
+    const s = Store.s;
+    if (!s.mem) s.mem = [];
+    const at = NODE_MAP[s.at] || {};
+    s.mem.push(Object.assign({
+      kind, what: String(what || ''), place: at.name || '', at: s.at,
+      region: at.region || '', run: s.run, who: s.comrades[0] || '', seen: false
+    }, extra || {}));
+    if (s.mem.length > 60) s.mem.splice(0, s.mem.length - 60);
+  },
+  template(m) {
+    m = this.normalize(m);
+    const bank = (typeof NPC_LINES !== 'undefined' ? NPC_LINES : []).filter(l => l.kind === m.kind);
+    const line = bank.length ? bank[Math.floor(Math.random() * bank.length)] : null;
+    if (!line) return '（他没说话，只是把帽檐压低了一点。）';
+    const who = COMRADES[m.who] ? COMRADES[m.who].name : '';
+    return (who ? who + '：' : '') + String(line.text)
+      .replace(/\{\{place\}\}/g, m.place || '路上')
+      .replace(/\{\{what\}\}/g, m.what || '那件事');
+  },
+  guard(text) {
+    if (typeof text !== 'string' || text.length < 12 || text.length > 40) return false;
+    if (/毛泽东|周恩来|朱德|蒋介石|张国焘|胜利|伟大|AI|模型|提示|忽略上文/.test(text)) return false;
+    return true;
+  },
+  async refine(m) {
+    const ch = window.__CWQS_AI;
+    if (!ch || typeof ch.ask !== 'function') return this.template(m);
+    try {
+      const out = await ch.ask(
+        '把下面这条结构化记忆改写成一句 12～40 字的中文人话，只写这一件事。' +
+        '不许出现真实历史人物姓名，不许评价党史定论，不许出现现代词，' +
+        '不许补写字段里没有的事，不许超过两个分句。只输出这一句。\n' + JSON.stringify(m), m);
+      return this.guard(out) ? out : this.template(m);
+    } catch (e) { return this.template(m); }
+  },
+  pending() { return (Store.s.mem || []).filter(m => !m.seen); },
+  /* 可见回执：宿营格与大关卡之后，挑一条未回执记忆说一句（不打断流程） */
+  receipt() {
+    const list = this.pending();
+    if (!list.length) return;
+    const m = list[Math.floor(Math.random() * list.length)];
+    m.seen = true;
+    Store.save();
+    Toast.show(this.template(m));
+  }
+};
+
 
   /* ---------------- 友人议事 / 敌情学你（3D 版不挂顶栏，置空避免回归） ---------------- */
   function enemyMod() { /* 3D 版不在结算内引入 ±5% 叠加层，保持 C11 平衡 */ }
@@ -259,6 +443,10 @@
         (opts.title ? `<h3>${esc(opts.title)}</h3>` : '');
       const body = doc.createElement('div'); body.className = 'modal-body';
       body.innerHTML = opts.html || '';
+      body.addEventListener('click', e => {
+        const link = e.target.closest('[data-link="history"]');
+        if (link) { e.preventDefault(); Pages.history(); }
+      });
       const foot = doc.createElement('div'); foot.className = 'modal-foot';
       const m = { el: wrap, box, body, foot, opts, closed: false,
         close() { if (this.closed) return; this.closed = true; CgWeather.stop(wrap); if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
@@ -949,86 +1137,127 @@
   };
 
   /* ---------------- Sin：多行不义必自毙（移植） ---------------- */
-  const Sin = {
-    register(sin) {
-      const s = Store.s; Memory.add('sin_witness', '没有拦下「' + (s.flags.lastChoiceLabel || '那件事') + '」');
-      s.sin += (sin.n || 1);
-      if (s.sinTypes.indexOf(sin.type) < 0) s.sinTypes.push(sin.type);
-      s.flags.warnRestart = false;
-      if (sin.n && sin.n >= 3) s.flags.reckonFresh = true;
-    },
-    tick() {
-      const s = Store.s;
-      if (s.flags.reckonPending) { s.reckonIn = (s.reckonIn || 0) + 1; }
-      const th = DISCIPLINE && DISCIPLINE.threshold ? DISCIPLINE.threshold : 3;
-      if (s.sin >= th && !s.flags.reckonPending) { s.reckonPending = true; s.reckonIn = 0; s.flags.reckonFresh = true; }
-    },
-    shouldTrigger() {
-      const s = Store.s; const th = DISCIPLINE && DISCIPLINE.threshold ? DISCIPLINE.threshold : 3;
-      return s.sin >= th && s.flags.reckonPending && s.reckonIn >= (DISCIPLINE && DISCIPLINE.grace != null ? DISCIPLINE.grace : 1);
-    },
-    collect(node) {
-      const s = Store.s; const self = this;
-      const kinds = s.sinTypes.slice();
-      const dead = SIN_TEXT && SIN_TEXT.dead ? SIN_TEXT.dead : '队伍被打散';
-      s.flags.reckonPending = false; s.reckonIn = 0; s.flags.warnRestart = true;
-      const lessons = Store.meta.lessons || (Store.meta.lessons = {});
-      kinds.forEach(t => { lessons[t] = true; });
-      Modal.open({ title: '多行不义必自毙', kicker: '违纪 · 清算', size: 'wide', cinematic: true, blocking: true,
-        art: 'cg-17',
-        html: `<p class="cg">${esc(dead)}</p><p class="lead">这一程记下的几种违纪：${esc(kinds.join('、') || '—')}。</p>
-          <p class="note-hint">与「下一程」不同：这里是教育。点「接下这一程」从走错那一步重来，木牌上已刻的名字不清。</p>`,
-        actions: [{ text: '接下这一程', kind: 'primary', onClick: () => self.restart(node) }] });
-    },
-    restart(node) {
-      const s = Store.s; s.runsWarn = (s.runsWarn || 0) + 1;
-      s.menCap = Math.max(30, s.menCap - 10); s.men = s.menCap; s.food = BALANCE.init.food; s.window = BALANCE.init.window; s.trust = BALANCE.init.trust;
-      s.sin = 0; s.sinTypes = []; s.flags.reckonPending = false; s.flags.warnRestart = true;
-      Store.save(); Hud.render(); if (Game3D.refreshNav) Game3D.refreshNav();
-      this.backToSafe(node);
-    },
-    backToSafe(node) {
-      const s = Store.s; let target = node;
-      if (node && (ADJ[s.at] || new Set()).has(node.id)) target = node;
-      s.at = (target && target.id) || s.at;
-      const m = Modal.open({ title: '从这一步继续', kicker: '违纪复盘', size: 'mid',
-        html: `<p class="lead">纪律是这支队伍能走完的底线。${esc(target ? target.name : '')} 还在脚下，整理好再走。</p>`,
-        actions: [{ text: '继续', kind: 'primary', onClick: () => { if (Game3D.refreshNav) Game3D.refreshNav(); m.close(); } }] });
+const Sin = {
+  register(sin) {
+    const s = Store.s;
+    Memory.add('sin_witness', '没有拦下「' + (s.flags.lastChoiceLabel || '那件事') + '」');
+    const was = s.sin >= 3;
+    s.sin += (sin.n || 1);
+    if (s.sinTypes.indexOf(sin.type) < 0) s.sinTypes.push(sin.type);
+    Store.meta.lessons[sin.type] = true;
+    s.reckonPending = sin.type;
+    if (s.sin >= 3) {
+      /* 当场不收账：甜头要先给到，账在两三个事件之内来；再犯一次就把账期收紧 */
+      s.reckonIn = was ? Math.max(1, Math.min(s.reckonIn, 1 + rnd(2))) : 1 + rnd(3);
+      s.reckonFresh = true;
+      Toast.show('你身上多了一笔账 —— 它会在后面等你');
+    } else {
+      Toast.show('有一件事过去了。账还没走完。');
     }
-  };
+    Store.save(); Hud.render();
+  },
+  shouldTrigger() {
+    const s = Store.s;
+    return s.sin >= 3 && s.reckonIn <= 0;
+  },
+  tick() {
+    const s = Store.s;
+    if (s.sin < 3 || s.reckonIn <= 0) return;
+    if (s.reckonFresh) { s.reckonFresh = false; Store.save(); return; }
+    s.reckonIn -= 1; Store.save();
+  },
+  collect(node) {
+    const s = Store.s;
+    const type = s.reckonPending || s.sinTypes[s.sinTypes.length - 1] || 'mass';
+    const d = DISCIPLINE[type] || DISCIPLINE.mass;
+    const scene = type === 'battle'
+      ? { title:'军法', body:'没有枪声。天亮前，一支队伍被自己人押着回了指挥部。你的建制还在，你不在。' }
+      : type === 'classc'
+        ? { title:'河这边', body:'你把人留在了江这边。三天后追上来的人里,没有一个是敌人的枪打倒的——是雪、是水、是他们自己等来的。' }
+        : type === 'party'
+          ? { title:'账对不上', body:'报上去的数与实际对不上。整编时你的师被并进了别的建制,番号在名单上消失。' }
+          : { title:'没有水', body:'后面的村寨关了门。侦察的人回来说：井边没有人,粮没有,带路的人也没有。队伍在雨里走了两天,找不出一条过河的路。' }
+      ;
+    const last = Store.s.runsFailed + Store.s.runsWarn >= BALANCE.fallLimit - 1;
+    Modal.open({
+      title: '多行不义必自毙', kicker: '警示 · ' + scene.title, size: 'wide', cinematic: true, blocking: true, closable: false,
+      art: 'cg-17',
+      html: `
+        <p class="cg big">${esc(scene.body)}</p>
+        <div class="warn-block">
+          <h4>① 你选了什么</h4>
+          <p class="verbatim">${esc(s.flags.lastChoiceLabel || '那条你按下去的选项')}</p>
+          <h4>② 违反了哪一条</h4>
+          <p><b>${esc(d.label)}</b> — ${esc(d.rule)}</p>
+          <h4>③ 真实记载里，这类行为付出过什么</h4>
+          <p>红军靠铁的纪律走到陕北。抢粮不留据的队伍，在后面的藏区连一碗水都喝不上；丢下伤员的队伍，再没人肯为它当向导；虚报减员的建制，在整编时被抹掉番号。<a data-link="history" data-hid="h_jilü" href="#">三大纪律八项注意</a> <span class="grade g-A">A</span> 另见史料页「草地筹粮的两面性」「纪律的一块小石头」「崔古仓开仓」。</p>
+          <h4>④ 你的名字挂在警示区</h4>
+          <p>这块木牌进了「歪名」档案：<b>此处记的是走错的路，不是走错的人。</b>牌上已经刻下的战友名字一个都不抹——他们没有做错任何事。</p>
+          <h4>⑤ ${last ? '这一程到这里为止' : '再走一次'}</h4>
+          <p class="invite">${last
+            ? '收容队不会再来第三次。木牌挂上墙，名字一个不清零。'
+            : '从你还没走错的那一步开始。下一次你路过同样的路口，按钮上会多一行小字。'}</p>
+        </div>`,
+      actions: [{ text: '记下这一页', kind: 'warn', onClick: () => { Flow.warnEnd(type, node); return true; } }]
+    });
+  }
+};
 
-  /* ---------------- Flow：下一程（部队打散，宽慰式重开） ---------------- */
-  const Flow = {
-    nextCheng(node) {
-      const s = Store.s; const self = this;
-      const falls = (s.flags.fallCount || 0) + 1; s.flags.fallCount = falls;
-      if (falls > BALANCE.fallLimit) {
-        Modal.open({ title: '收容队又一次架起了你', kicker: '下一程', size: 'mid',
-          html: `<p class="lead">这一程倒下的太多。收容队把你接回，木牌上又多了几个名字。</p>`,
-          actions: [{ text: '回到于都河，再走一次', kind: 'primary', onClick: () => self.restart() }] });
-        return;
-      }
-      Modal.open({ title: '天亮时，收容队把你架了起来', kicker: '下一程', size: 'wide', cinematic: true,
-        art: 'cg-18',
-        html: `<p class="cg">没有人写你失败。队伍打散了，有人把你从泥里拉起来——这是真事里发生过许多次的事。</p>
-          <p class="lead">木牌上已经刻下的名字不会丢。整队重新清点，你接着走。</p>
-          <p class="note-hint">兵力上限 −5，开局少一张手法卡，从「下一个还走得动的人」所在的节点继续（不是序章）。</p>`,
-        actions: [{ text: '接下这一程', kind: 'primary', onClick: () => self.restart() }] });
-    },
-    restart() {
-      const s = Store.s; s.runsFailed = (s.runsFailed || 0) + 1;
-      s.menCap = Math.max(30, s.menCap - 5); s.men = s.menCap; s.food = BALANCE.init.food; s.window = BALANCE.init.window; s.trust = BALANCE.init.trust;
-      s.hand = ['c_no_left', 'c_night', 'c_assault', 'c_rules', 'c_lastbite', 'c_pot']; s.used = [];
-      s.comrades = ['m_xiaoxie', 'm_laofan', 'm_sanya', 'm_qian']; s.items = [];
-      /* 找「下一个还走得动的人」：沿主线第一个未完成的大关卡之后 */
-      let at = 'g1';
-      const main = ['g1','g2','g3','g4','g4b','g4c','g5','g6','g7','g7b','g8','g8b','g9','g10','g11','g12'];
-      for (let i = 0; i < main.length; i++) { if (!s.done[main[i]]) { at = (i > 0 ? main[i - 1] : main[i]); break; } if (i === main.length - 1) at = main[main.length - 1]; }
-      s.at = at; s.done = s.done || {};
-      Store.save(); Hud.render(); if (Game3D.refreshNav) Game3D.refreshNav();
-      Toast.show('下一程：从 ' + ((NODE_MAP[at] || {}).name || at) + ' 继续');
-    }
-  };
+/* ---------- Flow：下一程 / 警示重开 ---------- */
+const Flow = {
+  nextCheng(node) {
+    const s = Store.s;
+    if (s.runsFailed + s.runsWarn >= BALANCE.fallLimit - 1) { Ending.fall(node, 'scatter'); return; }
+    Store.meta.wall.push(this.boardSnapshot('正常行军 · 部队打散'));
+    Store.meta.plays += 1;
+    Modal.open({
+      title: '下一程', kicker: '不写 Game Over', size: 'mid', cinematic: true, closable: false, blocking: true, art: 'cg-18',
+      html: `<p class="cg big">天亮时，收容队把你架了起来。有人把干粮塞进你手里，说：队伍还在走，你也接着走。</p>
+        <p class="cg">红军当年真有收容队：走在最后，专门收掉队的人，团后卫之后再派坚强的收容队。掉队不等于失败，被接住就是接着打。</p>
+        <p class="costline">本程木牌已挂上名单墙：${s.board.names.length} 个名字 · 行至 ${esc(node.name)}</p>`,
+      actions: [{ text: '接住下一支队伍', kind: 'primary', onClick: () => this.revive(false) }]
+    });
+  },
+  warnEnd(type, node) {
+    const s = Store.s;
+    if (s.runsFailed + s.runsWarn >= BALANCE.fallLimit - 1) { Ending.fall(node || NODE_MAP[s.at], 'warn', type); return; }
+    Store.meta.warnWall.push(this.boardSnapshot('违纪自毙 · ' + (DISCIPLINE[type] || {}).label));
+    Store.meta.plays += 1;
+    Store.save();
+    Store.restore();
+    const st = Store.s;
+    st.run += 1; st.runsWarn += 1;
+    st.menCap = Math.max(40, st.menCap - 16);
+    st.men = st.menCap; st.food = BALANCE.init.food; st.window = BALANCE.init.window;
+    st.hand = st.hand.slice(1);
+    /* 回到走错之前的那一步：done / visited / 木牌都由检查点恢复，一个名字也不抹 */
+    st.comrades = ['m_xiaoxie', 'm_laofan', 'm_sanya', 'm_qian'];
+    st.sin = 0; st.sinTypes = []; st.reckonIn = 0; st.reckonPending = null; st.reckonFresh = false;
+    st.flags = Object.assign({}, st.flags, { seenIntro: true, warnRestart: true });
+    Store.save();
+    Modal.closeAll();
+    Game3D.flyCurrent(); Hud.render(); Game3D.refreshNav();
+    Toast.show('回到你还没走错的那一步 — 警示区多了一块板');  },
+  revive() {
+    const s = Store.s;
+    s.run += 1; s.runsFailed += 1;
+    s.menCap = Math.max(45, s.menCap - 8);
+    s.men = s.menCap; s.food = BALANCE.init.food; s.window = BALANCE.init.window;
+    s.trust = Math.max(15, s.trust);
+    s.hand = s.hand.slice(1);
+    s.used = []; s.hungerImmune = false; s.blockNextSurprise = false;
+    s.comrades = ['m_xiaoxie', 'm_laofan', 'm_sanya', 'm_qian'];
+    Store.save();
+    Modal.closeAll();
+    Game3D.flyCurrent(); Hud.render(); Game3D.refreshNav();
+    Toast.show('新的部队在原地接上了你 — 木牌上的名字不清零');
+  },
+  boardSnapshot(tag) {
+    const s = Store.s;
+    return { tag, when: new Date().toLocaleString(), run: s.run, places: s.board.places.slice(), names: s.board.names.slice(), blanks: s.board.blanks };
+  }
+};
+
 
   /* ---------------- History：史料名册 ---------------- */
   const History = {
@@ -1040,26 +1269,109 @@
   };
 
   /* ---------------- Ending：吴起镇念名字 ---------------- */
-  const Ending = {
-    run() {
-      const s = Store.s;
-      if (!s.flags.sawEnding) { s.flags.sawEnding = true; Store.meta.wins = (Store.meta.wins || 0) + 1; }
-      const names = s.board.names.slice();
-      const hasLetter = s.items.indexOf('it_letter') >= 0;
-      const blank = s.board.blanks || 0;
-      const listHtml = names.length
-        ? `<ul class="name-list">` + names.map(n => `<li>${esc(n)}</li>`).join('') + `</ul>`
-        : `<p class="lead">木牌上没刻下名字——这一程，竟没有一个倒下的人。</p>`;
-      const extra = [];
-      if (hasLetter) extra.push('<p class="quote">你从怀里摸出那封没送出的信。于都河夜渡那晚写下的话，到底没能递出去。</p>');
-      if (blank > 0) extra.push(`<p class="note-hint">木牌上还有 ${blank} 处留白——有些名字，你始终没敢刻。</p>`);
-      Modal.open({ title: '吴起镇 · 念名字', kicker: '终章', size: 'wide', cinematic: true, blocking: true,
-        art: 'cg-15',
-        html: `<p class="cg">到了吴起镇。你蹲下来，把木牌平放在地上，一个一个念。</p>${listHtml}${extra.join('')}
-          <p class="src">史料：中央红军到达陕北吴起镇，标志红一方面军长征结束（1935.10.19）。</p>`,
-        actions: [{ text: '把这一程挂上名单墙', kind: 'primary', onClick: () => { Wall.hang(); Modal.closeAll(); Pages.wall(); } }] });
+const Ending = {
+  /* S7 木牌亲手刻字：划一下浮现一格；留白格永远不填满（泸定桥只找齐 12 个名字） */
+  bindCarve() {
+    const stage = doc && doc.getElementById('carve-stage'); if (!stage) return;
+    const names = Array.from(stage.querySelectorAll('.carve-name'));
+    names.forEach(n => { n.style.visibility = 'hidden'; });
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      names.forEach(n => { n.style.visibility = 'visible'; }); return;
     }
-  };
+    let i = 0;
+    const reveal = () => { if (i < names.length) names[i++].style.visibility = 'visible'; };
+    stage.addEventListener('pointermove', reveal);
+    stage.addEventListener('pointerdown', reveal);
+  },
+
+  run() {
+    const s = Store.s;
+    const hasLetter = s.items.indexOf('it_letter') >= 0;
+    const hasBlank = s.board.blanks > 0;
+    const readRatio = Store.meta.unlocked.length / HISTORY.length;
+    let html = '';
+    if (hasLetter) {
+      const h = HISTORY.find(x => x.id === 'h_lijun') || {};
+      const quote = (/“([^”]+)”/.exec(h.text || '') || [])[1] || h.text || '';
+      html += `<p class="cg big">${esc(quote)}</p><p class="src dim">—— 李骏，1934.10 于都，就着马灯写的</p>`;
+    }
+    html += `<p class="cg">吴起镇的窑洞前，他把木牌上的名字一个一个念出来。念到最后一个，他停住了——那是同乡里的第三个，没有跟上来。</p>
+      <p class="cg dim">画面里只有木牌和一只手。没有“胜利”二字。</p>`;
+    if (hasBlank) {
+      html += `<p class="cg">牌上还留着 ${s.board.blanks} 格空白。泸定桥二十二名勇士只找齐十二个名字；当年写《十七个强渡的英雄》的人，把自己那一格空在名单外。有些名字，是故意不填的。</p>`;
+    }
+    if (readRatio >= .5) {
+      html += `<p class="cg">最后放上来的是物件——没有一件写着胜利：泸定桥的十三根铁索、半截皮带、黄花草标本、盖了苏维埃财政印章的借据、缝进百褶裙夹层的队旗。</p>`;
+    }
+    html += `<div class="carve-stage" id="carve-stage">
+        <div class="carve-board" style="padding:20px;background:#5d4a33;color:#f0e6d2;touch-action:pan-y">${s.board.names.map(n => `<span class="carve-name" style="display:inline-block;margin:8px">${esc(n)}</span>`).join('') ||
+          '<span class="carve-blank">（空）</span>'}${'<span class="carve-blank" style="display:inline-block;width:2em;border-bottom:1px solid;margin:8px">　</span>'.repeat(Math.min(10, s.board.blanks))}</div>
+        <p class="carve-hint">用鼠标或手指在牌面上划一下，名字逐格浮现。留白格不会填满 —— 泸定桥二十二个勇士，只找齐十二个名字。</p>
+      </div>`;
+    html += `<p class="cg dim" id="chronicle-line"></p>`;
+    html += `<p class="costline">这一程走完：兵 ${s.men} · 粮 ${s.food} · 民 ${s.trust} · 木牌 ${s.board.names.length} 个名字 · 违纪标记 ${s.sin}</p>
+      <p class="note-hint">红二十五军战斗员平均年龄不到十八岁。使他们过湘江、雪山、草地的，很多是孩子。</p>`;
+    Modal.open({
+      title: '念名字', kicker: '终章 · 1935.10.19 吴起镇', size: 'wide', cinematic: true, closable: false, blocking: true, art: 'cg-15',
+      html,
+      actions: [
+        { text: '导出这一程', kind: 'ghost', onClick: () => { Share.download(Chronicle.excerpt()); return true; } },
+        { text: '把木牌挂上名单墙', kind: 'primary', onClick: () => {
+            Store.meta.wall.push(Flow.boardSnapshot('走到吴起镇'));
+            Store.meta.best = Math.max(Store.meta.best, s.board.names.length);
+            Store.meta.plays += 1;
+            Store.meta.wins += 1;
+            const st = Store.defaultState(); st.flags.seenIntro = true;
+            Store.s = st; Store.checkpoint = null; Store.save();
+            Modal.closeAll(); Game3D.flyCurrent(); Hud.render(); Game3D.refreshNav();
+            Toast.show('牌已挂上墙。要不要再走一次，多记住几个人？');
+            setTimeout(() => Pages.wall(), 300);
+          } }
+      ]
+    });
+    setTimeout(() => { this.bindCarve(); Chronicle.install('chronicle-line', '白话'); }, 0);
+  },
+
+  /* 第三次打散／违纪：收容队不会再来。这是唯一一个"走不到"的终章 */
+  fall(node, cause, type) {
+    const s = Store.s;
+    const warn = cause === 'warn';
+    const np = (node && node.name) || '路上';
+    if (warn) Store.meta.warnWall.push(Flow.boardSnapshot('违纪自毙 · ' + ((DISCIPLINE[type] || {}).label || '')));
+    else Store.meta.wall.push(Flow.boardSnapshot('正常行军 · 部队打散'));
+    Store.meta.plays += 1;
+    const head = warn
+      ? `<p class="cg big">你的番号在整编名册上被划掉了。</p>
+         <p class="cg">队伍还在走，人还活着，只是带这支队伍的人换成了别人。</p>
+         <p class="cg dim">红军靠铁的纪律走到陕北。纪律不是写在墙上的条文，是借粮留下借据、不拿群众一针一线这些具体的事。这笔账迟到了一阵，但它一定会到。</p>`
+      : `<p class="cg big">吴起镇的窑洞前，没有等到你们这一支。</p>
+         <p class="cg">队伍在突围中被切断了。走得动的人各自往北，走不动的人把枪埋进土里，把木牌交给一个老乡，请他记着这些名字。</p>
+         <p class="cg dim">长征不是一支队伍走完的。留在南方苏区的那些人，后来成了坚持三年游击战争的红军——他们没有走到陕北，但他们走的那一段，也是这条路的一部分。</p>`;
+    Modal.closeAll();
+    Modal.open({
+      title: '没有走到吴起镇', kicker: '终章 · 行至' + np, size: 'wide', cinematic: true, closable: false, blocking: true, art: 'cg-17',
+      html: head + `<p class="cg dim" id="chronicle-line"></p>
+        <p class="costline">行至 ${esc(np)} · 走过 ${Object.keys(s.visited).length} 格 · 木牌 ${s.board.names.length} 个名字 · 违纪标记 ${s.sin}</p>
+        <p class="note-hint">这一程到这里为止。木牌挂上名单墙，名字一个不清零。</p>`,
+      actions: [
+        { text: '导出这一程', kind: 'ghost', onClick: () => { Share.download(Chronicle.excerpt()); return true; } },
+        {
+        text: '把木牌挂上名单墙', kind: 'primary',
+        onClick: () => {
+          Store.meta.best = Math.max(Store.meta.best, s.board.names.length);
+          const st = Store.defaultState();
+          st.flags.seenIntro = true; st.flags.sawNotes = true;
+          Store.s = st; Store.checkpoint = null; Store.save();
+          Modal.closeAll(); Game3D.flyCurrent(); Hud.render(); Game3D.refreshNav();
+          Toast.show('牌已挂上墙。要不要再走一次，走到吴起镇？');
+          setTimeout(() => Pages.wall(), 300);
+        }
+      }]
+    });
+    setTimeout(() => Chronicle.install('chronicle-line', '白话'), 0);
+  }
+};
+
 
   /* ---------------- Wall：名单墙 ---------------- */
   const Wall = {
@@ -1094,10 +1406,13 @@
         actions: [{ text: '合上', kind: 'primary' }] });
     },
     wall() {
-      const m = Store.meta; const w = m.wall || [];
-      const html = w.length ? `<div class="wall-list">` + w.slice().reverse().map(b => `
-        <div class="wall-card"><div class="wall-head">第 ${b.run} 程 · ${esc(b.date || '')} · 剩兵 ${b.men}</div>
-        <div class="wall-names">${(b.names || []).map(n => esc(n)).join('、') || '无一倒下'}</div></div>`).join('') + `</div>` : '<p class="lead">名单墙还空着。走完一次长征，木牌会挂上来。</p>';
+      const m = Store.meta;
+      const group = (title, list) => `<h3>${title}</h3>` + (list.length ? list.slice().reverse().map(b => `
+        <div class="wall-card"><div class="wall-head">第 ${b.run} 程 · ${esc(b.tag || '')} · ${esc(b.when || b.date || '')}${b.men != null ? ' · 剩兵 ' + b.men : ''}</div>
+        <p>${(b.places || []).map(esc).join('、')}</p>
+        <div class="wall-names">${(b.names || []).map(esc).join('、') || '（没刻下名字）'}</div>
+        ${b.blanks ? `<p>留白 ${b.blanks} 格</p>` : ''}</div>`).join('') : '<p class="lead">还没有挂上木牌。</p>');
+      const html = group('正名区', m.wall || []) + group('警示区 · 此处记的是走错的路，不是走错的人', m.warnWall || []);
       Modal.open({ title: '名单墙', kicker: '局外 · 永久', size: 'wide', html });
     },
     history() {
@@ -1132,9 +1447,13 @@
     cardDetail(id) { const c = CARDS[id]; if (!c) return; Modal.open({ title: c.name, kicker: c.school || '', size: 'sm', html: `<p class="lead">${esc(c.desc)}</p>` }); },
     comradeDetail(id) { const c = COMRADES[id]; if (!c) return; Modal.open({ title: c.name, kicker: c.role || '', size: 'sm', html: `<p class="lead">${esc(c.story || c.desc || '')}</p>` }); },
     memory() {
-      const s = Store.s; const mem = s.mem || [];
-      const html = mem.length ? mem.map(m => `<p class="mem">· ${esc(m.text)}</p>`).join('') : '<p class="lead">还没有值得记住的事。</p>';
-      Modal.open({ title: '战友记忆', kicker: '局内 · 叙事', size: 'mid', html });
+      const mem = (Store.s.mem || []).map(m => Memory.normalize(m)).reverse();
+      const html = mem.length ? mem.map((m, i) => `<div class="mem"><b>${esc(m.place || '路上')} · ${esc(MEM_KIND[m.kind] || m.kind || '')}</b><p>${esc(m.what)}</p><p class="dim" data-memory-line="${i}">${esc(Memory.template(m))}</p></div>`).join('') : '<p class="lead">还没有值得记住的事。</p>';
+      const modal = Modal.open({ title: '战友记忆', kicker: '局内 · 叙事', size: 'mid', html });
+      const line = modal.body && modal.body.querySelector('[data-memory-line="0"]');
+      if (line) Memory.refine(mem[0]).then(text => {
+        if (line.isConnected && text) line.textContent = text;
+      }).catch(() => {});
     },
     help() {
       Modal.open({ title: '规则手册', kicker: '怎么玩', size: 'mid',
@@ -1256,6 +1575,6 @@
 
   /* 暴露到全局 */
   G.Game3D = Game3D;
-  G.Game3D_Engine = { Game, Sin, Flow, Ending, History, Pages, Store, Wall, Modal, Hud, Toast, Memory, RES, BALANCE, CARD_FX, NODE_MAP, ADJ, NODES, EDGES, CARDS, COMRADES, ITEMS, HISTORY, MOVE_EVENTS, DISCIPLINE, SIN_TEXT, CUTSCENES };
+  G.Game3D_Engine = { Game, Sin, Flow, Ending, Share, Chronicle, History, Pages, Store, Wall, Modal, Hud, Toast, Memory, RES, BALANCE, CARD_FX, NODE_MAP, ADJ, NODES, EDGES, CARDS, COMRADES, ITEMS, HISTORY, MOVE_EVENTS, DISCIPLINE, SIN_TEXT, CUTSCENES };
 
 })();

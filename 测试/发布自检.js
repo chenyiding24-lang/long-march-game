@@ -104,14 +104,17 @@ try {
 /* ---------- 8. 比赛版：缓存版本号、CG 分镜表、图位体积 ---------- */
 /* 托管方边缘按 URL 缓存静态文件，四个引用的版本号必须一起 bump，
    否则改了 data.js 却忘了 game.js，访客看到的会是新旧混搭。 */
-const vers = [...(html + map + r3d).matchAll(/\?v=(\d+)/g)].map(m => m[1]);
+const vers = [...(html + map + r3d + tutorial + js + js3d).matchAll(/[?&]v=(\d+)/g)].map(m => m[1]);
+const tutorialVersion = (tutorial.match(/var VERSION = ['"](\d+)['"]/) || [])[1];
+if (tutorialVersion && tutorialVersion === vers[0]) pass('新手引导内部版本与页面一致：' + tutorialVersion);
+else fail('新手引导内部版本与页面不一致：' + tutorialVersion + '/' + vers[0]);
 if (vers.length >= 4 && vers.every(v => v === vers[0])) pass('全部静态引用版本号一致：?v=' + vers[0]);
 else fail('静态引用版本号不一致（边缘缓存会让访客看到旧稿）：' + (vers.join('/') || '无版本号'));
 
 /* 所有被引用的 cg-NN 都必须在 CG_ART 表里有运镜与天气，否则放映机不知道怎么动 */
 const artTable = (data.match(/const CG_ART = ([\s\S]*?);/) || [])[1] || '';
 const tableKeys = [...artTable.matchAll(/['"](cg-\d{2})['"]\s*:/g)].map(m => m[1]);
-const artIds = [...new Set([...(js + data).matchAll(/['"](cg-\d{2})['"]/g)].map(m => m[1]))].sort();
+const artIds = [...new Set([...(js + js3d + data).matchAll(/['"](cg-\d{2})['"]/g)].map(m => m[1]))].sort();
 const missingMeta = artIds.filter(id => tableKeys.indexOf(id) < 0);
 if (missingMeta.length) fail('CG_ART 表缺这些分镜的运镜/天气：' + missingMeta.join('、'));
 else pass('CG_ART 表覆盖全部 ' + artIds.length + ' 个被引用的分镜编号');
